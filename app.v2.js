@@ -115,6 +115,26 @@ function score() {
   return { ok, fail };
 }
 
+function savedResult(test, saved) {
+  if (!saved?.reviewed) return null;
+  let ok = 0;
+  let fail = 0;
+  test.questions.forEach((question) => {
+    const answer = saved.answers?.[question.question_id];
+    if (!answer) return;
+    if (answer === question.correct) ok += 1;
+    else fail += 1;
+  });
+  return { ok, fail };
+}
+
+function resultClass(result) {
+  if (!result) return "";
+  if (result.fail === 0) return " result-perfect";
+  if (result.fail <= 2) return " result-pass";
+  return " result-fail";
+}
+
 function showToast(message) {
   els.toast.textContent = message;
   els.toast.classList.add("show");
@@ -248,9 +268,10 @@ function renderTests() {
     }
     const saved = loadProgress(test);
     const count = test.questions.filter((question) => saved.answers?.[question.question_id]).length;
+    const result = savedResult(test, saved);
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `test-item${index === state.testIndex ? " active" : ""}`;
+    button.className = `test-item${index === state.testIndex ? " active" : ""}${resultClass(result)}`;
     const subtitle = testSubtitle(test);
     const details = [
       subtitle,

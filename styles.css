@@ -200,6 +200,36 @@ svg {
   box-shadow: inset 3px 0 0 var(--brand);
 }
 
+.test-item.result-perfect {
+  border-color: #9bd8b0;
+  background: #effaf2;
+}
+
+.test-item.result-perfect .mini-score {
+  background: #d8f3df;
+  color: var(--good);
+}
+
+.test-item.result-pass {
+  border-color: #e7bd72;
+  background: #fff7e8;
+}
+
+.test-item.result-pass .mini-score {
+  background: #fce8be;
+  color: var(--warn);
+}
+
+.test-item.result-fail {
+  border-color: #eba59e;
+  background: #fff1ef;
+}
+
+.test-item.result-fail .mini-score {
+  background: #f9d7d3;
+  color: var(--bad);
+}
+
 .test-item strong {
   display: block;
   font-size: 14px;
