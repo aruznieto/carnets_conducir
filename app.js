@@ -259,10 +259,16 @@ function reviewTest() {
   const test = currentTest();
   if (!test) return;
   const missing = test.questions.length - answeredCount(test);
+  if (missing) {
+    const firstMissing = test.questions.findIndex((question) => !state.answers[question.question_id]);
+    if (firstMissing >= 0) selectQuestion(firstMissing);
+    showToast(`Te faltan ${missing} preguntas por responder.`);
+    return;
+  }
   state.reviewed = true;
   saveProgress();
   render();
-  showToast(missing ? `Corregido. Quedan ${missing} preguntas sin responder.` : "Test corregido.");
+  showToast("Test corregido.");
 }
 
 function resetTest() {
@@ -442,6 +448,7 @@ function render() {
     els.categoryLabel.textContent = `${category.title || "Tests"} · ${test.topic_title}`;
   }
   els.reviewButton.classList.toggle("primary", state.reviewed);
+  els.reviewButton.disabled = !state.reviewed && answeredCount(test) < test.questions.length;
   renderCategories();
   renderTests();
   renderQuestion();
