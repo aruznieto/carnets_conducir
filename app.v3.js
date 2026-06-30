@@ -105,7 +105,7 @@ function exportProgress() {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   showToast("Progreso descargado.");
 }
 
@@ -330,11 +330,13 @@ function renderTests() {
       lastTopicKey = topicKey;
     }
     const saved = loadProgress(test);
-    const count = test.questions.filter((question) => saved.answers?.[question.question_id]).length;
-    const result = savedResult(test, saved);
+    const isActive = index === state.testIndex;
+    const progressForCard = isActive ? { answers: state.answers, reviewed: state.reviewed } : saved;
+    const count = test.questions.filter((question) => progressForCard.answers?.[question.question_id]).length;
+    const result = savedResult(test, progressForCard);
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `test-item${index === state.testIndex ? " active" : ""}${resultClass(result)}`;
+    button.className = `test-item${isActive ? " active" : ""}${resultClass(result)}`;
     const subtitle = testSubtitle(test);
     const details = [
       subtitle,
