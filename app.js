@@ -160,9 +160,13 @@ function selectQuestion(index) {
 
 function answerQuestion(letter) {
   const question = currentQuestion();
+  const test = currentTest();
   if (!question) return;
   state.answers[question.question_id] = letter;
   saveProgress();
+  if (test && state.questionIndex < test.questions.length - 1 && !state.reviewed) {
+    state.questionIndex += 1;
+  }
   renderQuestion();
   renderStats();
 }
