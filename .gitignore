@@ -1,0 +1,8 @@
+.DS_Store
+__pycache__/
+*.pyc
+*.bak
+*_dump.py
+*_images.py
+*_moto.json
+*_moto.json.bak

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Moto A1/A2</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Selector de tests">
+        <div class="brand">
+          <div class="brand-mark">A</div>
+          <div>
+            <p class="eyebrow">Permiso moto</p>
+            <h1>Moto A1/A2</h1>
+          </div>
+        </div>
+
+        <div class="search-wrap">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z"/></svg>
+          <input id="searchInput" type="search" placeholder="Buscar tests o preguntas">
+        </div>
+
+        <div id="categoryTabs" class="category-tabs" role="tablist" aria-label="Categorías"></div>
+        <div id="testList" class="test-list"></div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <button id="menuButton" class="icon-button menu-button" type="button" aria-label="Abrir tests">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+          <div>
+            <p id="categoryLabel" class="eyebrow">Cargando</p>
+            <h2 id="testTitle">Preparando tests...</h2>
+          </div>
+          <div class="top-actions">
+            <button id="reviewButton" class="ghost-button" type="button">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 11 12 14 22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              Corregir
+            </button>
+            <button id="resetButton" class="icon-button" type="button" aria-label="Reiniciar test">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v6h6"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <section class="stats-row" aria-label="Progreso">
+          <div class="stat-card">
+            <span>Progreso</span>
+            <strong id="progressValue">0/0</strong>
+          </div>
+          <div class="stat-card">
+            <span>Aciertos</span>
+            <strong id="scoreValue">-</strong>
+          </div>
+          <div class="stat-card">
+            <span>Fallos</span>
+            <strong id="missValue">-</strong>
+          </div>
+          <div class="progress-track" aria-hidden="true"><div id="progressBar"></div></div>
+        </section>
+
+        <section class="workspace">
+          <nav id="questionRail" class="question-rail" aria-label="Preguntas"></nav>
+
+          <article class="question-panel">
+            <div class="question-head">
+              <span id="questionCounter" class="pill">Pregunta</span>
+              <div class="question-actions">
+                <button id="prevButton" class="icon-button" type="button" aria-label="Pregunta anterior">
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <button id="nextButton" class="icon-button" type="button" aria-label="Pregunta siguiente">
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="question-layout">
+              <figure class="image-frame">
+                <img id="questionImage" alt="">
+              </figure>
+
+              <div class="question-content">
+                <h3 id="questionText"></h3>
+                <div id="answers" class="answers"></div>
+              </div>
+            </div>
+
+            <section id="explanationBox" class="explanation" hidden>
+              <div class="explanation-title">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 17h.01M12 13a3 3 0 1 0-3-3M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
+                Explicación
+              </div>
+              <p id="explanationText"></p>
+            </section>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <div id="sidebarScrim" class="scrim" hidden></div>
+    <div id="imageModal" class="image-modal" hidden role="dialog" aria-modal="true" aria-label="Imagen ampliada">
+      <button id="imageModalClose" class="icon-button image-modal-close" type="button" aria-label="Cerrar imagen">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <img id="imageModalImg" alt="">
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
