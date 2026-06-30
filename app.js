@@ -178,6 +178,11 @@ function score() {
   return { ok, fail };
 }
 
+function updateReviewButtonState(test = currentTest()) {
+  if (!test) return;
+  els.reviewButton.disabled = !state.reviewed && answeredCount(test) < test.questions.length;
+}
+
 function savedResult(test, saved) {
   if (!saved?.reviewed) return null;
   let ok = 0;
@@ -435,6 +440,7 @@ function renderStats() {
   els.scoreValue.textContent = result.ok;
   els.missValue.textContent = result.fail;
   els.progressBar.style.width = `${percent}%`;
+  updateReviewButtonState(test);
 }
 
 function render() {
@@ -448,7 +454,7 @@ function render() {
     els.categoryLabel.textContent = `${category.title || "Tests"} · ${test.topic_title}`;
   }
   els.reviewButton.classList.toggle("primary", state.reviewed);
-  els.reviewButton.disabled = !state.reviewed && answeredCount(test) < test.questions.length;
+  updateReviewButtonState(test);
   renderCategories();
   renderTests();
   renderQuestion();
