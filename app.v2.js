@@ -16,6 +16,9 @@ const els = {
   categoryTabs: document.getElementById("categoryTabs"),
   testList: document.getElementById("testList"),
   searchInput: document.getElementById("searchInput"),
+  exportButton: document.getElementById("exportButton"),
+  importButton: document.getElementById("importButton"),
+  importFile: document.getElementById("importFile"),
   categoryLabel: document.getElementById("categoryLabel"),
   testTitle: document.getElementById("testTitle"),
   reviewButton: document.getElementById("reviewButton"),
@@ -73,6 +76,66 @@ function saveProgress() {
     answers: state.answers,
     reviewed: state.reviewed,
   }));
+}
+
+function allTests() {
+  return state.categories.flatMap((category) => category.tests);
+}
+
+function exportProgress() {
+  const progress = {};
+  allTests().forEach((test) => {
+    const saved = loadProgress(test);
+    if (Object.keys(saved.answers || {}).length || saved.reviewed) {
+      progress[publicTestId(test)] = saved;
+    }
+  });
+
+  const payload = {
+    app: "moto-a1-a2",
+    version: 1,
+    exported_at: new Date().toISOString(),
+    progress,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `moto-a1-a2-progreso-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  showToast("Progreso descargado.");
+}
+
+async function importProgressFile(file) {
+  try {
+    const payload = JSON.parse(await file.text());
+    const progress = payload.progress && typeof payload.progress === "object" ? payload.progress : payload;
+    const knownIds = new Set(allTests().map(publicTestId));
+    let imported = 0;
+
+    Object.entries(progress).forEach(([id, value]) => {
+      if (!knownIds.has(id) || !value || typeof value !== "object") return;
+      const answers = value.answers && typeof value.answers === "object" ? value.answers : {};
+      localStorage.setItem(`moto-tests:${id}`, JSON.stringify({
+        answers,
+        reviewed: Boolean(value.reviewed),
+      }));
+      imported += 1;
+    });
+
+    const activeProgress = loadProgress(currentTest());
+    state.answers = activeProgress.answers || {};
+    state.reviewed = Boolean(activeProgress.reviewed);
+    render();
+    showToast(imported ? `Progreso cargado: ${imported} tests.` : "No había progreso compatible en el archivo.");
+  } catch {
+    showToast("No se pudo cargar el archivo.");
+  } finally {
+    els.importFile.value = "";
+  }
 }
 
 function imageSrc(image) {
@@ -405,6 +468,12 @@ async function init() {
 function bindEvents() {
   els.menuButton.addEventListener("click", () => openSidebar(true));
   els.scrim.addEventListener("click", () => openSidebar(false));
+  els.exportButton.addEventListener("click", exportProgress);
+  els.importButton.addEventListener("click", () => els.importFile.click());
+  els.importFile.addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    if (file) importProgressFile(file);
+  });
   els.questionImage.addEventListener("click", openImageModal);
   els.imageModalClose.addEventListener("click", closeImageModal);
   els.imageModal.addEventListener("click", (event) => {
