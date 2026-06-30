@@ -161,6 +161,7 @@ function selectQuestion(index) {
 function answerQuestion(letter) {
   const question = currentQuestion();
   const test = currentTest();
+  if (state.reviewed) return;
   if (!question) return;
   state.answers[question.question_id] = letter;
   saveProgress();
@@ -316,6 +317,7 @@ function renderQuestion() {
     if (state.reviewed) {
       if (answer.letter === question.correct) button.classList.add("correct");
       if (selected === answer.letter && selected !== question.correct) button.classList.add("wrong");
+      button.disabled = true;
     }
     button.innerHTML = `
       <span class="answer-letter">${answer.letter}</span>

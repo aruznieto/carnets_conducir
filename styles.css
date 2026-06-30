@@ -461,6 +461,11 @@ svg {
   text-align: left;
 }
 
+.answer-button:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
 .answer-letter {
   display: grid;
   place-items: center;
