@@ -128,7 +128,7 @@ svg {
 
 .category-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
   margin-bottom: 16px;
 }
@@ -139,7 +139,7 @@ svg {
   border-radius: var(--radius);
   background: white;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -153,6 +153,16 @@ svg {
   display: grid;
   gap: 8px;
   padding-bottom: 18px;
+}
+
+.empty-state {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: white;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 14px;
 }
 
 .topic-heading {
@@ -473,6 +483,10 @@ svg {
   max-height: 100%;
   object-fit: contain;
   cursor: zoom-in;
+}
+
+.image-frame[hidden] + .question-content {
+  grid-column: 1 / -1;
 }
 
 .question-content h3 {

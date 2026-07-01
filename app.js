@@ -31,6 +31,7 @@ const els = {
   questionCounter: document.getElementById("questionCounter"),
   prevButton: document.getElementById("prevButton"),
   nextButton: document.getElementById("nextButton"),
+  imageFrame: document.querySelector(".image-frame"),
   questionImage: document.getElementById("questionImage"),
   imageModal: document.getElementById("imageModal"),
   imageModalImg: document.getElementById("imageModalImg"),
@@ -43,6 +44,7 @@ const els = {
 };
 
 function currentCategory() {
+  if (isFailedCategory()) return failedCategory();
   return state.categories[state.categoryIndex];
 }
 
@@ -82,6 +84,41 @@ function allTests() {
   return state.categories.flatMap((category) => category.tests);
 }
 
+function isFailedCategory(index = state.categoryIndex) {
+  return index === state.categories.length;
+}
+
+function failedQuestions() {
+  return allTests().flatMap((test) => {
+    const saved = loadProgress(test);
+    if (!saved.reviewed) return [];
+    return test.questions
+      .filter((question) => saved.answers?.[question.question_id] && saved.answers[question.question_id] !== question.correct)
+      .map((question) => ({
+        ...question,
+        question_id: `failed:${publicTestId(test)}:${question.question_id}`,
+        original_question_id: question.question_id,
+        origin_test_id: publicTestId(test),
+        origin_test_title: testDisplayName(test),
+        origin_topic_title: test.topic_title || "",
+      }));
+  });
+}
+
+function failedCategory() {
+  const questions = failedQuestions();
+  return {
+    title: "Falladas",
+    tip: "failed",
+    tests: [{
+      id: "falladas",
+      test_id: "falladas",
+      questions_count: questions.length,
+      questions,
+    }],
+  };
+}
+
 function exportProgress() {
   const progress = {};
   allTests().forEach((test) => {
@@ -90,6 +127,10 @@ function exportProgress() {
       progress[publicTestId(test)] = saved;
     }
   });
+  const failedProgress = loadProgress(failedCategory().tests[0]);
+  if (Object.keys(failedProgress.answers || {}).length || failedProgress.reviewed) {
+    progress.falladas = failedProgress;
+  }
 
   const payload = {
     app: "moto-a1-a2",
@@ -113,7 +154,7 @@ async function importProgressFile(file) {
   try {
     const payload = JSON.parse(await file.text());
     const progress = payload.progress && typeof payload.progress === "object" ? payload.progress : payload;
-    const knownIds = new Set(allTests().map(publicTestId));
+    const knownIds = new Set([...allTests().map(publicTestId), "falladas"]);
     let imported = 0;
 
     Object.entries(progress).forEach(([id, value]) => {
@@ -145,6 +186,7 @@ function imageSrc(image) {
 }
 
 function categoryShortTitle(category) {
+  if (category.tip === "failed") return "Falladas";
   const title = (category.title || `Tipo ${category.tip}`)
     .replace(/^test\s+/i, "")
     .replace(/\s+DGT$/i, " DGT");
@@ -152,6 +194,7 @@ function categoryShortTitle(category) {
 }
 
 function testDisplayName(test) {
+  if (publicTestId(test) === "falladas") return "Preguntas falladas";
   return `Test ${publicTestId(test)}`;
 }
 
@@ -180,7 +223,7 @@ function score() {
 
 function updateReviewButtonState(test = currentTest()) {
   if (!test) return;
-  els.reviewButton.disabled = !state.reviewed && answeredCount(test) < test.questions.length;
+  els.reviewButton.disabled = !test.questions.length || (!state.reviewed && answeredCount(test) < test.questions.length);
 }
 
 function savedResult(test, saved) {
@@ -216,6 +259,7 @@ function openSidebar(open) {
 }
 
 function openImageModal() {
+  if (els.imageFrame.hidden) return;
   if (!els.questionImage.src) return;
   els.imageModalImg.src = els.questionImage.src;
   els.imageModalImg.alt = els.questionImage.alt;
@@ -241,6 +285,12 @@ function switchTest(categoryIndex, testIndex) {
 function selectQuestion(index) {
   const test = currentTest();
   if (!test) return;
+  if (!test.questions.length) {
+    state.questionIndex = 0;
+    renderQuestion();
+    renderStats();
+    return;
+  }
   state.questionIndex = Math.max(0, Math.min(index, test.questions.length - 1));
   renderQuestion();
   renderStats();
@@ -263,6 +313,10 @@ function answerQuestion(letter) {
 function reviewTest() {
   const test = currentTest();
   if (!test) return;
+  if (!test.questions.length) {
+    showToast("No hay preguntas falladas.");
+    return;
+  }
   const missing = test.questions.length - answeredCount(test);
   if (missing) {
     const firstMissing = test.questions.findIndex((question) => !state.answers[question.question_id]);
@@ -306,7 +360,8 @@ function filteredTests(category) {
 
 function renderCategories() {
   els.categoryTabs.innerHTML = "";
-  state.categories.forEach((category, index) => {
+  const categories = [...state.categories, failedCategory()];
+  categories.forEach((category, index) => {
     const button = document.createElement("button");
     button.className = `category-tab${index === state.categoryIndex ? " active" : ""}`;
     button.type = "button";
@@ -327,6 +382,13 @@ function renderCategories() {
 function renderTests() {
   const category = currentCategory();
   els.testList.innerHTML = "";
+  if (category.tip === "failed" && !category.tests[0].questions.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "Cuando corrijas tests, aquí aparecerán las preguntas falladas.";
+    els.testList.appendChild(empty);
+    return;
+  }
   let lastTopicKey = "";
   filteredTests(category).forEach(({ test, index }) => {
     const topicKey = test.topic_title ? `${test.topic_number}:${test.topic_title}` : "";
@@ -349,11 +411,13 @@ function renderTests() {
     button.type = "button";
     button.className = `test-item${isActive ? " active" : ""}${resultClass(result)}`;
     const subtitle = testSubtitle(test);
-    const details = [
-      subtitle,
-      `${test.questions_count || test.questions.length} preguntas`,
-      `ID ${publicTestId(test)}`,
-    ].filter(Boolean).join(" · ");
+    const details = publicTestId(test) === "falladas"
+      ? `${test.questions.length} preguntas`
+      : [
+        subtitle,
+        `${test.questions_count || test.questions.length} preguntas`,
+        `ID ${publicTestId(test)}`,
+      ].filter(Boolean).join(" · ");
     button.innerHTML = `
       <span>
         <strong>${testDisplayName(test)}</strong>
@@ -376,6 +440,7 @@ function renderTests() {
 function renderQuestionRail() {
   const test = currentTest();
   els.questionRail.innerHTML = "";
+  if (!test?.questions.length) return;
   test.questions.forEach((question, index) => {
     const answer = state.answers[question.question_id];
     const button = document.createElement("button");
@@ -395,10 +460,27 @@ function renderQuestionRail() {
 function renderQuestion() {
   const test = currentTest();
   const question = currentQuestion();
-  if (!test || !question) return;
+  if (!test || !question) {
+    els.questionCounter.textContent = "Sin preguntas";
+    els.questionText.textContent = "Cuando corrijas tests, aquí aparecerán las preguntas que hayas fallado.";
+    els.imageFrame.hidden = true;
+    els.questionImage.removeAttribute("src");
+    els.questionImage.alt = "";
+    els.prevButton.disabled = true;
+    els.nextButton.disabled = true;
+    els.answers.innerHTML = "";
+    els.explanationBox.hidden = true;
+    els.explanationText.textContent = "";
+    renderQuestionRail();
+    return;
+  }
 
-  els.questionCounter.textContent = `Pregunta ${state.questionIndex + 1} de ${test.questions.length}`;
+  const failedOrigin = publicTestId(test) === "falladas" && question.origin_test_title
+    ? `${question.origin_test_title} · `
+    : "";
+  els.questionCounter.textContent = `${failedOrigin}Pregunta ${state.questionIndex + 1} de ${test.questions.length}`;
   els.questionText.textContent = question.question;
+  els.imageFrame.hidden = !question.image;
   els.questionImage.src = imageSrc(question.image);
   els.questionImage.alt = question.question;
   els.prevButton.disabled = state.questionIndex === 0;
@@ -448,9 +530,11 @@ function render() {
   const test = currentTest();
   if (!category || !test) return;
 
-  els.categoryLabel.textContent = `${category.title || "Tests"} · ${category.tests.length} tests`;
+  els.categoryLabel.textContent = category.tip === "failed"
+    ? `${test.questions.length} preguntas`
+    : `${category.title || "Tests"} · ${category.tests.length} tests`;
   els.testTitle.textContent = testDisplayName(test);
-  if (test.topic_title) {
+  if (test.topic_title && category.tip !== "failed") {
     els.categoryLabel.textContent = `${category.title || "Tests"} · ${test.topic_title}`;
   }
   els.reviewButton.classList.toggle("primary", state.reviewed);
