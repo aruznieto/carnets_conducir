@@ -871,9 +871,9 @@ svg {
   }
 
   #changePermitButton {
-    width: 56px;
-    min-height: 50px;
-    flex: 0 0 56px;
+    width: 44px;
+    min-height: 44px;
+    flex: 0 0 44px;
   }
 
   #changePermitButton svg {
