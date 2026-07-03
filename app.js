@@ -1,5 +1,27 @@
+const DATASETS = {
+  b: {
+    file: "tests_b.json",
+    label: "Carnet B",
+    shortLabel: "B",
+    eyebrow: "Permiso B",
+    mark: "B",
+    storagePrefix: "car-b-tests",
+    exportName: "carnet-b",
+  },
+  moto: {
+    file: "tests.json",
+    label: "Moto A1/A2",
+    shortLabel: "A1/A2",
+    eyebrow: "Permiso moto",
+    mark: "A",
+    storagePrefix: "moto-tests",
+    exportName: "moto-a1-a2",
+  },
+};
+
 const state = {
   data: null,
+  datasetKey: null,
   categories: [],
   categoryIndex: 0,
   testIndex: 0,
@@ -10,15 +32,22 @@ const state = {
 };
 
 const els = {
+  permitModal: document.getElementById("permitModal"),
+  permitStatus: document.getElementById("permitStatus"),
+  permitOptions: document.querySelectorAll(".permit-option"),
   sidebar: document.querySelector(".sidebar"),
   scrim: document.getElementById("sidebarScrim"),
   menuButton: document.getElementById("menuButton"),
+  brandMark: document.getElementById("brandMark"),
+  brandEyebrow: document.getElementById("brandEyebrow"),
+  brandTitle: document.getElementById("brandTitle"),
   categoryTabs: document.getElementById("categoryTabs"),
   testList: document.getElementById("testList"),
   searchInput: document.getElementById("searchInput"),
   exportButton: document.getElementById("exportButton"),
   importButton: document.getElementById("importButton"),
   importFile: document.getElementById("importFile"),
+  changePermitButton: document.getElementById("changePermitButton"),
   categoryLabel: document.getElementById("categoryLabel"),
   testTitle: document.getElementById("testTitle"),
   reviewButton: document.getElementById("reviewButton"),
@@ -43,6 +72,10 @@ const els = {
   toast: document.getElementById("toast"),
 };
 
+function activeDataset() {
+  return DATASETS[state.datasetKey] || DATASETS.moto;
+}
+
 function currentCategory() {
   if (isFailedCategory()) return failedCategory();
   return state.categories[state.categoryIndex];
@@ -57,7 +90,7 @@ function currentQuestion() {
 }
 
 function storageKey(test = currentTest()) {
-  return test ? `moto-tests:${publicTestId(test)}` : "moto-tests:empty";
+  return test ? `${activeDataset().storagePrefix}:${publicTestId(test)}` : `${activeDataset().storagePrefix}:empty`;
 }
 
 function publicTestId(test) {
@@ -133,7 +166,8 @@ function exportProgress() {
   }
 
   const payload = {
-    app: "moto-a1-a2",
+    app: activeDataset().exportName,
+    permit: state.datasetKey,
     version: 1,
     exported_at: new Date().toISOString(),
     progress,
@@ -142,7 +176,7 @@ function exportProgress() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `moto-a1-a2-progreso-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `${activeDataset().exportName}-progreso-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -160,7 +194,7 @@ async function importProgressFile(file) {
     Object.entries(progress).forEach(([id, value]) => {
       if (!knownIds.has(id) || !value || typeof value !== "object") return;
       const answers = value.answers && typeof value.answers === "object" ? value.answers : {};
-      localStorage.setItem(`moto-tests:${id}`, JSON.stringify({
+      localStorage.setItem(`${activeDataset().storagePrefix}:${id}`, JSON.stringify({
         answers,
         reviewed: Boolean(value.reviewed),
       }));
@@ -191,9 +225,9 @@ function categoryShortTitle(category) {
     .replace(/^test\s+/i, "")
     .replace(/\s+DGT$/i, " DGT");
   const normalized = title.toLowerCase();
-  if (normalized === "oficiales dgt") return "DGT";
-  if (normalized === "de examen") return "EXAMEN";
-  if (normalized === "por temas") return "TEMAS";
+  if (normalized.includes("dgt") || normalized.includes("oficial")) return "DGT";
+  if (normalized.includes("examen")) return "EXAMEN";
+  if (normalized.includes("tema")) return "TEMAS";
   return title;
 }
 
@@ -549,9 +583,62 @@ function render() {
   renderStats();
 }
 
-async function init() {
+function setPermitControlsLoading(loading, message = "") {
+  els.permitOptions.forEach((button) => {
+    button.disabled = loading;
+  });
+  els.permitStatus.textContent = message;
+}
+
+function applyDatasetBrand() {
+  const dataset = activeDataset();
+  document.title = `${dataset.label} · Tests`;
+  els.brandMark.textContent = dataset.mark;
+  els.brandEyebrow.textContent = dataset.eyebrow;
+  els.brandTitle.textContent = dataset.label;
+}
+
+function resetViewState() {
+  state.categoryIndex = 0;
+  state.testIndex = 0;
+  state.questionIndex = 0;
+  state.answers = {};
+  state.reviewed = false;
+  state.query = "";
+  els.searchInput.value = "";
+}
+
+function clearQuestionView(message = "Elige un permiso para cargar los tests.") {
+  els.categoryTabs.innerHTML = "";
+  els.testList.innerHTML = "";
+  els.categoryLabel.textContent = "Sin permiso";
+  els.testTitle.textContent = "Tests de conducir";
+  els.questionCounter.textContent = "Preparado";
+  els.questionText.textContent = message;
+  els.imageFrame.hidden = true;
+  els.questionImage.removeAttribute("src");
+  els.questionImage.alt = "";
+  els.prevButton.disabled = true;
+  els.nextButton.disabled = true;
+  els.answers.innerHTML = "";
+  els.explanationBox.hidden = true;
+  els.progressValue.textContent = "0/0";
+  els.scoreValue.textContent = "-";
+  els.missValue.textContent = "-";
+  els.progressBar.style.width = "0%";
+  els.reviewButton.disabled = true;
+}
+
+async function loadDataset(datasetKey) {
+  const dataset = DATASETS[datasetKey];
+  if (!dataset) return;
   try {
-    const response = await fetch("tests.json");
+    setPermitControlsLoading(true, `Cargando ${dataset.label}...`);
+    state.datasetKey = datasetKey;
+    resetViewState();
+    applyDatasetBrand();
+    clearQuestionView(`Cargando ${dataset.label}...`);
+    const response = await fetch(dataset.file);
     if (!response.ok) throw new Error(`No se pudo cargar el JSON (${response.status})`);
     state.data = await response.json();
     state.categories = state.data.categories || [];
@@ -559,18 +646,37 @@ async function init() {
     const progress = loadProgress(currentTest());
     state.answers = progress.answers || {};
     state.reviewed = Boolean(progress.reviewed);
-    bindEvents();
+    els.permitModal.hidden = true;
     render();
+    showToast(`${dataset.label} cargado.`);
   } catch (error) {
+    els.permitStatus.textContent = error.message;
     els.testTitle.textContent = "No se pudieron cargar los tests";
     els.questionText.textContent = error.message;
     showToast(error.message);
+  } finally {
+    setPermitControlsLoading(false, els.permitStatus.textContent);
   }
 }
 
+function showPermitModal() {
+  els.permitModal.hidden = false;
+  setPermitControlsLoading(false, "");
+}
+
+function init() {
+  bindEvents();
+  clearQuestionView();
+  showPermitModal();
+}
+
 function bindEvents() {
+  els.permitOptions.forEach((button) => {
+    button.addEventListener("click", () => loadDataset(button.dataset.permit));
+  });
   els.menuButton.addEventListener("click", () => openSidebar(true));
   els.scrim.addEventListener("click", () => openSidebar(false));
+  els.changePermitButton.addEventListener("click", showPermitModal);
   els.exportButton.addEventListener("click", exportProgress);
   els.importButton.addEventListener("click", () => els.importFile.click());
   els.importFile.addEventListener("change", (event) => {

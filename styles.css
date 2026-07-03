@@ -45,6 +45,101 @@ svg {
   stroke-linejoin: round;
 }
 
+.permit-modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  background: rgba(18, 28, 24, 0.5);
+  padding: 20px;
+}
+
+.permit-modal[hidden] {
+  display: none;
+}
+
+.permit-dialog {
+  width: min(560px, 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: white;
+  box-shadow: var(--shadow);
+  padding: 24px;
+}
+
+.permit-dialog h1 {
+  margin: 0 0 18px;
+  font-size: 30px;
+  letter-spacing: 0;
+}
+
+.permit-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.permit-option {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 12px;
+  align-items: center;
+  min-height: 96px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fbfcfb;
+  color: var(--ink);
+  padding: 14px;
+  text-align: left;
+}
+
+.permit-option:hover {
+  border-color: var(--brand);
+  background: #eef8f5;
+}
+
+.permit-option:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.permit-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius);
+  background: var(--brand);
+  color: white;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.permit-option strong,
+.permit-option span span {
+  display: block;
+}
+
+.permit-option strong {
+  font-size: 18px;
+}
+
+.permit-option span span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.permit-status {
+  min-height: 20px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: 340px minmax(0, 1fr);
@@ -308,6 +403,10 @@ svg {
   gap: 8px;
   padding: 0 14px;
   font-weight: 800;
+}
+
+.ghost-button.compact {
+  padding: 0 12px;
 }
 
 .ghost-button.primary,
@@ -707,6 +806,14 @@ svg {
 }
 
 @media (max-width: 620px) {
+  .permit-dialog {
+    padding: 18px;
+  }
+
+  .permit-options {
+    grid-template-columns: 1fr;
+  }
+
   .topbar {
     align-items: flex-start;
   }

@@ -3,20 +3,44 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Moto A1/A2</title>
+    <title>Tests de conducir</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260701-2">
+    <link rel="stylesheet" href="styles.css?v=20260703-1">
   </head>
   <body>
+    <div id="permitModal" class="permit-modal" role="dialog" aria-modal="true" aria-labelledby="permitTitle">
+      <div class="permit-dialog">
+        <p class="eyebrow">Selecciona permiso</p>
+        <h1 id="permitTitle">Tests de conducir</h1>
+        <div class="permit-options">
+          <button class="permit-option" type="button" data-permit="b">
+            <span class="permit-mark">B</span>
+            <span>
+              <strong>Carnet B</strong>
+              <span>Turismo</span>
+            </span>
+          </button>
+          <button class="permit-option" type="button" data-permit="moto">
+            <span class="permit-mark">A</span>
+            <span>
+              <strong>Moto A1/A2</strong>
+              <span>Motocicleta</span>
+            </span>
+          </button>
+        </div>
+        <p id="permitStatus" class="permit-status" role="status" aria-live="polite"></p>
+      </div>
+    </div>
+
     <div class="app-shell">
       <aside class="sidebar" aria-label="Selector de tests">
         <div class="brand">
-          <div class="brand-mark">A</div>
+          <div id="brandMark" class="brand-mark">A</div>
           <div>
-            <p class="eyebrow">Permiso moto</p>
-            <h1>Moto A1/A2</h1>
+            <p id="brandEyebrow" class="eyebrow">Permiso</p>
+            <h1 id="brandTitle">Tests</h1>
           </div>
         </div>
 
@@ -46,6 +70,10 @@
               <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 21V9m0 0 4 4m-4-4-4 4M4 3h16"/></svg>
             </button>
             <input id="importFile" type="file" accept="application/json,.json" hidden>
+            <button id="changePermitButton" class="ghost-button compact" type="button">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01"/></svg>
+              Permiso
+            </button>
             <button id="reviewButton" class="ghost-button" type="button">
               <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 11 12 14 22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
               Corregir
@@ -119,6 +147,6 @@
       <img id="imageModalImg" alt="">
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260701-2"></script>
+    <script src="app.js?v=20260703-1"></script>
   </body>
 </html>
