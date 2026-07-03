@@ -51,6 +51,7 @@ const els = {
   brandTitle: document.getElementById("brandTitle"),
   categoryTabs: document.getElementById("categoryTabs"),
   statusFilter: document.getElementById("statusFilter"),
+  statusFilterOptions: document.getElementById("statusFilterOptions"),
   testList: document.getElementById("testList"),
   searchInput: document.getElementById("searchInput"),
   exportButton: document.getElementById("exportButton"),
@@ -633,7 +634,7 @@ function renderCategories() {
   const categories = [...state.categories, failedCategory(), markedCategory()];
   categories.forEach((category, index) => {
     const button = document.createElement("button");
-    button.className = `category-tab${index === state.categoryIndex ? " active" : ""}`;
+    button.className = `category-tab category-tab-${category.tip || "main"}${index === state.categoryIndex ? " active" : ""}`;
     button.type = "button";
     button.textContent = categoryShortTitle(category);
     button.addEventListener("click", async () => {
@@ -652,6 +653,35 @@ function renderCategories() {
     });
     els.categoryTabs.appendChild(button);
   });
+}
+
+function renderStatusFilters() {
+  els.statusFilterOptions.innerHTML = "";
+  [...els.statusFilter.options].forEach((option) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `filter-option${option.value === state.statusFilter ? " active" : ""}`;
+    button.dataset.filter = option.value;
+    button.textContent = option.textContent;
+    els.statusFilterOptions.appendChild(button);
+  });
+}
+
+async function applyStatusFilter(value) {
+  state.statusFilter = value;
+  els.statusFilter.value = value;
+  state.testPage = 0;
+  const category = currentCategory();
+  const first = filteredTests(category)[0];
+  if (first) {
+    state.testIndex = first.index;
+    await hydrateCurrentTest();
+    const progress = loadProgress(currentTest());
+    state.answers = progress.answers || {};
+    state.reviewed = Boolean(progress.reviewed);
+    state.marked = new Set(progress.marked || []);
+  }
+  render();
 }
 
 function renderTests() {
@@ -865,6 +895,7 @@ function render() {
   els.reviewButton.classList.toggle("primary", state.reviewed);
   updateReviewButtonState(test);
   renderCategories();
+  renderStatusFilters();
   renderTests();
   renderQuestion();
   renderStats();
@@ -1001,20 +1032,10 @@ function bindEvents() {
     state.testPage = 0;
     renderTests();
   });
-  els.statusFilter.addEventListener("change", async (event) => {
-    state.statusFilter = event.target.value;
-    state.testPage = 0;
-    const category = currentCategory();
-    const first = filteredTests(category)[0];
-    if (first) {
-      state.testIndex = first.index;
-      await hydrateCurrentTest();
-      const progress = loadProgress(currentTest());
-      state.answers = progress.answers || {};
-      state.reviewed = Boolean(progress.reviewed);
-      state.marked = new Set(progress.marked || []);
-    }
-    render();
+  els.statusFilterOptions.addEventListener("click", (event) => {
+    const button = event.target.closest(".filter-option");
+    if (!button) return;
+    applyStatusFilter(button.dataset.filter);
   });
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !els.imageModal.hidden) closeImageModal();

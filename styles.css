@@ -223,12 +223,13 @@ svg {
 
 .category-tabs {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
-  margin-bottom: 10px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
 .category-tab {
+  grid-column: span 2;
   min-height: 42px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -236,12 +237,18 @@ svg {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+  padding: 0 8px;
 }
 
 .category-tab.active {
   border-color: var(--brand);
   background: #e8f4f1;
   color: var(--brand-strong);
+}
+
+.category-tab-failed,
+.category-tab-marked {
+  grid-column: span 3;
 }
 
 .filter-wrap {
@@ -257,15 +264,37 @@ svg {
   text-transform: uppercase;
 }
 
-.filter-wrap select {
-  width: 100%;
-  min-height: 42px;
+.filter-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.filter-option {
+  min-height: 38px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: white;
-  color: var(--ink);
+  color: var(--muted);
   padding: 0 10px;
+  font-size: 12px;
   font-weight: 800;
+  text-align: center;
+}
+
+.filter-option:first-child {
+  grid-column: 1 / -1;
+}
+
+.filter-option:hover {
+  border-color: var(--brand);
+  color: var(--brand-strong);
+}
+
+.filter-option.active {
+  border-color: var(--brand);
+  background: #e8f4f1;
+  color: var(--brand-strong);
 }
 
 .test-list {
@@ -932,7 +961,7 @@ svg {
   }
 
   .category-tabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .ghost-button {
