@@ -223,9 +223,9 @@ svg {
 
 .category-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .category-tab {
@@ -242,6 +242,30 @@ svg {
   border-color: var(--brand);
   background: #e8f4f1;
   color: var(--brand-strong);
+}
+
+.filter-wrap {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.filter-wrap span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.filter-wrap select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: white;
+  color: var(--ink);
+  padding: 0 10px;
+  font-weight: 800;
 }
 
 .test-list {
@@ -462,6 +486,12 @@ svg {
   color: var(--brand-strong);
 }
 
+.icon-button.active {
+  border-color: #d5b16f;
+  background: #fff8e8;
+  color: #8a5a00;
+}
+
 .ghost-button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -519,6 +549,34 @@ svg {
   border-radius: inherit;
   background: var(--brand);
   transition: width 180ms ease;
+}
+
+.summary-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(110px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.summary-row div {
+  min-height: 58px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: white;
+  padding: 10px 12px;
+}
+
+.summary-row span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.summary-row strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
 }
 
 .workspace {
@@ -823,6 +881,10 @@ svg {
     grid-template-columns: repeat(3, 1fr);
   }
 
+  .summary-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
   .progress-track {
     grid-column: 1 / -1;
   }
@@ -869,6 +931,10 @@ svg {
     justify-content: flex-end;
   }
 
+  .category-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .ghost-button {
     width: 44px;
     padding: 0;
@@ -882,6 +948,10 @@ svg {
   }
 
   .stats-row {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-row {
     grid-template-columns: 1fr;
   }
 

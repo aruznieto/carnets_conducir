@@ -35,6 +35,8 @@ const state = {
   reviewed: false,
   query: "",
   loadedPages: new Set(),
+  marked: new Set(),
+  statusFilter: "all",
 };
 
 const els = {
@@ -48,6 +50,7 @@ const els = {
   brandEyebrow: document.getElementById("brandEyebrow"),
   brandTitle: document.getElementById("brandTitle"),
   categoryTabs: document.getElementById("categoryTabs"),
+  statusFilter: document.getElementById("statusFilter"),
   testList: document.getElementById("testList"),
   searchInput: document.getElementById("searchInput"),
   exportButton: document.getElementById("exportButton"),
@@ -61,10 +64,15 @@ const els = {
   progressValue: document.getElementById("progressValue"),
   scoreValue: document.getElementById("scoreValue"),
   missValue: document.getElementById("missValue"),
+  doneTestsValue: document.getElementById("doneTestsValue"),
+  passedTestsValue: document.getElementById("passedTestsValue"),
+  failedQuestionsValue: document.getElementById("failedQuestionsValue"),
+  markedQuestionsValue: document.getElementById("markedQuestionsValue"),
   progressBar: document.getElementById("progressBar"),
   questionRail: document.getElementById("questionRail"),
   questionCounter: document.getElementById("questionCounter"),
   prevButton: document.getElementById("prevButton"),
+  markButton: document.getElementById("markButton"),
   nextButton: document.getElementById("nextButton"),
   imageFrame: document.querySelector(".image-frame"),
   questionImage: document.getElementById("questionImage"),
@@ -84,6 +92,7 @@ function activeDataset() {
 
 function currentCategory() {
   if (isFailedCategory()) return failedCategory();
+  if (isMarkedCategory()) return markedCategory();
   return state.categories[state.categoryIndex];
 }
 
@@ -110,17 +119,29 @@ function publicTestId(test) {
 function loadProgress(test) {
   try {
     const raw = localStorage.getItem(storageKey(test));
-    return raw ? JSON.parse(raw) : { answers: {}, reviewed: false };
+    return normalizeProgress(raw ? JSON.parse(raw) : {});
   } catch {
-    return { answers: {}, reviewed: false };
+    return normalizeProgress({});
   }
 }
 
 function saveProgress() {
+  const result = state.reviewed ? score() : null;
   localStorage.setItem(storageKey(), JSON.stringify({
     answers: state.answers,
     reviewed: state.reviewed,
+    marked: [...state.marked],
+    result: result && typeof result.ok === "number" ? result : null,
   }));
+}
+
+function normalizeProgress(progress) {
+  return {
+    answers: progress.answers && typeof progress.answers === "object" ? progress.answers : {},
+    reviewed: Boolean(progress.reviewed),
+    marked: Array.isArray(progress.marked) ? progress.marked : [],
+    result: progress.result || null,
+  };
 }
 
 function allTests() {
@@ -182,8 +203,27 @@ async function hydrateReviewedPages() {
   )));
 }
 
+async function hydrateMarkedPages() {
+  const pages = new Map();
+  state.categories.forEach((category, categoryIndex) => {
+    category.tests.forEach((test, testIndex) => {
+      const saved = loadProgress(test);
+      if (!saved.marked.length) return;
+      if (!pages.has(categoryIndex)) pages.set(categoryIndex, new Set());
+      pages.get(categoryIndex).add(pageIndexForTest(testIndex));
+    });
+  });
+  await Promise.all([...pages.entries()].flatMap(([categoryIndex, pageIndexes]) => (
+    [...pageIndexes].map((pageIndex) => hydrateCategoryPage(categoryIndex, pageIndex))
+  )));
+}
+
 function isFailedCategory(index = state.categoryIndex) {
   return index === state.categories.length;
+}
+
+function isMarkedCategory(index = state.categoryIndex) {
+  return index === state.categories.length + 1;
 }
 
 function failedQuestions() {
@@ -217,6 +257,38 @@ function failedCategory() {
   };
 }
 
+function markedQuestions() {
+  return allTests().flatMap((test) => {
+    const saved = loadProgress(test);
+    if (!saved.marked.length) return [];
+    const markedIds = new Set(saved.marked);
+    return (test.questions || [])
+      .filter((question) => markedIds.has(question.question_id))
+      .map((question) => ({
+        ...question,
+        question_id: `marked:${publicTestId(test)}:${question.question_id}`,
+        original_question_id: question.question_id,
+        origin_test_id: publicTestId(test),
+        origin_test_title: testDisplayName(test),
+        origin_topic_title: test.topic_title || "",
+      }));
+  });
+}
+
+function markedCategory() {
+  const questions = markedQuestions();
+  return {
+    title: "Marcadas",
+    tip: "marked",
+    tests: [{
+      id: "marcadas",
+      test_id: "marcadas",
+      questions_count: questions.length,
+      questions,
+    }],
+  };
+}
+
 function exportProgress() {
   const progress = {};
   allTests().forEach((test) => {
@@ -228,6 +300,10 @@ function exportProgress() {
   const failedProgress = loadProgress(failedCategory().tests[0]);
   if (Object.keys(failedProgress.answers || {}).length || failedProgress.reviewed) {
     progress.falladas = failedProgress;
+  }
+  const markedProgress = loadProgress(markedCategory().tests[0]);
+  if (Object.keys(markedProgress.answers || {}).length || markedProgress.reviewed) {
+    progress.marcadas = markedProgress;
   }
 
   const payload = {
@@ -253,7 +329,7 @@ async function importProgressFile(file) {
   try {
     const payload = JSON.parse(await file.text());
     const progress = payload.progress && typeof payload.progress === "object" ? payload.progress : payload;
-    const knownIds = new Set([...allTests().map(publicTestId), "falladas"]);
+    const knownIds = new Set([...allTests().map(publicTestId), "falladas", "marcadas"]);
     let imported = 0;
 
     Object.entries(progress).forEach(([id, value]) => {
@@ -262,6 +338,8 @@ async function importProgressFile(file) {
       localStorage.setItem(`${activeDataset().storagePrefix}:${id}`, JSON.stringify({
         answers,
         reviewed: Boolean(value.reviewed),
+        marked: Array.isArray(value.marked) ? value.marked : [],
+        result: value.result || null,
       }));
       imported += 1;
     });
@@ -286,6 +364,7 @@ function imageSrc(image) {
 
 function categoryShortTitle(category) {
   if (category.tip === "failed") return "Falladas";
+  if (category.tip === "marked") return "Marcadas";
   const title = (category.title || `Tipo ${category.tip}`)
     .replace(/^test\s+/i, "")
     .replace(/\s+DGT$/i, " DGT");
@@ -298,6 +377,7 @@ function categoryShortTitle(category) {
 
 function testDisplayName(test) {
   if (publicTestId(test) === "falladas") return "Preguntas falladas";
+  if (publicTestId(test) === "marcadas") return "Preguntas marcadas";
   return `Test ${publicTestId(test)}`;
 }
 
@@ -332,6 +412,7 @@ function updateReviewButtonState(test = currentTest()) {
 
 function savedResult(test, saved) {
   if (!saved?.reviewed) return null;
+  if (saved.result && typeof saved.result.fail === "number") return saved.result;
   let ok = 0;
   let fail = 0;
   if (!test.questions?.length) return null;
@@ -342,6 +423,47 @@ function savedResult(test, saved) {
     else fail += 1;
   });
   return { ok, fail };
+}
+
+function testStatus(test) {
+  const saved = loadProgress(test);
+  const total = questionsCount(test);
+  const answered = Math.min(Object.keys(saved.answers || {}).length, total);
+  const result = savedResult(test, saved);
+  if (result) {
+    if (result.fail === 0) return "perfect";
+    if (result.fail <= 2) return "pass";
+    return "fail";
+  }
+  if (saved.reviewed) return "reviewed";
+  if (answered > 0) return "started";
+  return "pending";
+}
+
+function matchesStatusFilter(test) {
+  const filter = state.statusFilter;
+  if (filter === "all" || publicTestId(test) === "falladas" || publicTestId(test) === "marcadas") return true;
+  const status = testStatus(test);
+  if (filter === "reviewed") return ["reviewed", "perfect", "pass", "fail"].includes(status);
+  return status === filter;
+}
+
+function datasetSummary() {
+  const tests = allTests();
+  let done = 0;
+  let passed = 0;
+  let failedQuestions = 0;
+  let marked = 0;
+  tests.forEach((test) => {
+    const saved = loadProgress(test);
+    if (saved.reviewed) done += 1;
+    marked += saved.marked.length;
+    const result = savedResult(test, saved);
+    if (!result) return;
+    failedQuestions += result.fail;
+    if (result.fail <= 2) passed += 1;
+  });
+  return { total: tests.length, done, passed, failedQuestions, marked };
 }
 
 function resultClass(result) {
@@ -384,6 +506,7 @@ async function switchTest(categoryIndex, testIndex) {
   const progress = loadProgress(currentTest());
   state.answers = progress.answers || {};
   state.reviewed = Boolean(progress.reviewed);
+  state.marked = new Set(progress.marked || []);
   openSidebar(false);
   render();
 }
@@ -402,6 +525,7 @@ async function switchTestPage(page) {
     const progress = loadProgress(currentTest());
     state.answers = progress.answers || {};
     state.reviewed = Boolean(progress.reviewed);
+    state.marked = new Set(progress.marked || []);
   }
   render();
 }
@@ -409,7 +533,7 @@ async function switchTestPage(page) {
 function selectQuestion(index) {
   const test = currentTest();
   if (!test) return;
-  if (!test.questions.length) {
+  if (!test.questions?.length) {
     state.questionIndex = 0;
     renderQuestion();
     renderStats();
@@ -427,9 +551,25 @@ function answerQuestion(letter) {
   if (!question) return;
   state.answers[question.question_id] = letter;
   saveProgress();
-  if (test && state.questionIndex < test.questions.length - 1 && !state.reviewed) {
+  if (test?.questions?.length && state.questionIndex < test.questions.length - 1 && !state.reviewed) {
     state.questionIndex += 1;
   }
+  renderQuestion();
+  renderStats();
+}
+
+function toggleMarkedQuestion() {
+  const question = currentQuestion();
+  if (!question) return;
+  const id = question.original_question_id || question.question_id;
+  if (state.marked.has(id)) {
+    state.marked.delete(id);
+    showToast("Pregunta desmarcada.");
+  } else {
+    state.marked.add(id);
+    showToast("Pregunta marcada.");
+  }
+  saveProgress();
   renderQuestion();
   renderStats();
 }
@@ -437,8 +577,8 @@ function answerQuestion(letter) {
 function reviewTest() {
   const test = currentTest();
   if (!test) return;
-  if (!test.questions.length) {
-    showToast("No hay preguntas falladas.");
+  if (!test.questions?.length) {
+    showToast("No hay preguntas para corregir.");
     return;
   }
   const missing = test.questions.length - answeredCount(test);
@@ -460,16 +600,22 @@ function resetTest() {
   state.answers = {};
   state.reviewed = false;
   state.questionIndex = 0;
-  localStorage.removeItem(storageKey(test));
+  if (state.marked.size) {
+    saveProgress();
+  } else {
+    localStorage.removeItem(storageKey(test));
+  }
   render();
   showToast("Test reiniciado.");
 }
 
 function filteredTests(category) {
   const query = state.query.trim().toLowerCase();
-  if (!query) return category.tests.map((test, index) => ({ test, index }));
-  return category.tests
+  const withIndex = category.tests
     .map((test, index) => ({ test, index }))
+    .filter(({ test }) => matchesStatusFilter(test));
+  if (!query) return withIndex;
+  return withIndex
     .filter(({ test }) => {
       const haystack = [
         testDisplayName(test),
@@ -484,7 +630,7 @@ function filteredTests(category) {
 
 function renderCategories() {
   els.categoryTabs.innerHTML = "";
-  const categories = [...state.categories, failedCategory()];
+  const categories = [...state.categories, failedCategory(), markedCategory()];
   categories.forEach((category, index) => {
     const button = document.createElement("button");
     button.className = `category-tab${index === state.categoryIndex ? " active" : ""}`;
@@ -496,10 +642,12 @@ function renderCategories() {
       state.testPage = 0;
       state.questionIndex = 0;
       if (isFailedCategory(index)) await hydrateReviewedPages();
+      else if (isMarkedCategory(index)) await hydrateMarkedPages();
       else await hydrateCategoryPage(index, 0);
       const progress = loadProgress(currentTest());
       state.answers = progress.answers || {};
       state.reviewed = Boolean(progress.reviewed);
+      state.marked = new Set(progress.marked || []);
       render();
     });
     els.categoryTabs.appendChild(button);
@@ -509,10 +657,12 @@ function renderCategories() {
 function renderTests() {
   const category = currentCategory();
   els.testList.innerHTML = "";
-  if (category.tip === "failed" && !category.tests[0].questions.length) {
+  if (["failed", "marked"].includes(category.tip) && !category.tests[0].questions.length) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
-    empty.textContent = "Cuando corrijas tests, aquí aparecerán las preguntas falladas.";
+    empty.textContent = category.tip === "failed"
+      ? "Cuando corrijas tests, aquí aparecerán las preguntas falladas."
+      : "Marca preguntas con la estrella para repasarlas aquí.";
     els.testList.appendChild(empty);
     return;
   }
@@ -547,7 +697,7 @@ function renderTests() {
     button.type = "button";
     button.className = `test-item${isActive ? " active" : ""}${resultClass(result)}`;
     const subtitle = testSubtitle(test);
-    const details = publicTestId(test) === "falladas"
+    const details = ["falladas", "marcadas"].includes(publicTestId(test))
       ? `${test.questions.length} preguntas`
       : [
         subtitle,
@@ -627,6 +777,8 @@ function renderQuestion() {
     els.questionImage.removeAttribute("src");
     els.questionImage.alt = "";
     els.prevButton.disabled = true;
+    els.markButton.disabled = true;
+    els.markButton.classList.remove("active");
     els.nextButton.disabled = true;
     els.answers.innerHTML = "";
     els.explanationBox.hidden = true;
@@ -635,16 +787,19 @@ function renderQuestion() {
     return;
   }
 
-  const failedOrigin = publicTestId(test) === "falladas" && question.origin_test_title
+  const specialOrigin = ["falladas", "marcadas"].includes(publicTestId(test)) && question.origin_test_title
     ? `${question.origin_test_title} · `
     : "";
-  els.questionCounter.textContent = `${failedOrigin}Pregunta ${state.questionIndex + 1} de ${test.questions.length}`;
+  els.questionCounter.textContent = `${specialOrigin}Pregunta ${state.questionIndex + 1} de ${test.questions.length}`;
   els.questionText.textContent = question.question;
   els.imageFrame.hidden = !question.image;
   els.questionImage.src = imageSrc(question.image);
   els.questionImage.alt = question.question;
   els.prevButton.disabled = state.questionIndex === 0;
   els.nextButton.disabled = state.questionIndex === test.questions.length - 1;
+  const markId = question.original_question_id || question.question_id;
+  els.markButton.disabled = publicTestId(test) === "falladas" || publicTestId(test) === "marcadas";
+  els.markButton.classList.toggle("active", state.marked.has(markId));
 
   els.answers.innerHTML = "";
   const selected = state.answers[question.question_id];
@@ -683,7 +838,16 @@ function renderStats() {
   els.scoreValue.textContent = result.ok;
   els.missValue.textContent = result.fail;
   els.progressBar.style.width = `${percent}%`;
+  renderSummary();
   updateReviewButtonState(test);
+}
+
+function renderSummary() {
+  const summary = datasetSummary();
+  els.doneTestsValue.textContent = `${summary.done}/${summary.total}`;
+  els.passedTestsValue.textContent = String(summary.passed);
+  els.failedQuestionsValue.textContent = String(summary.failedQuestions);
+  els.markedQuestionsValue.textContent = String(summary.marked);
 }
 
 function render() {
@@ -691,7 +855,7 @@ function render() {
   const test = currentTest();
   if (!category || !test) return;
 
-  els.categoryLabel.textContent = category.tip === "failed"
+  els.categoryLabel.textContent = ["failed", "marked"].includes(category.tip)
     ? `${test.questions.length} preguntas`
     : `${category.title || "Tests"} · ${category.tests.length} tests`;
   els.testTitle.textContent = testDisplayName(test);
@@ -730,7 +894,10 @@ function resetViewState() {
   state.reviewed = false;
   state.query = "";
   state.loadedPages = new Set();
+  state.marked = new Set();
+  state.statusFilter = "all";
   els.searchInput.value = "";
+  els.statusFilter.value = "all";
 }
 
 function clearQuestionView(message = "Elige un permiso para cargar los tests.") {
@@ -744,6 +911,8 @@ function clearQuestionView(message = "Elige un permiso para cargar los tests.") 
   els.questionImage.removeAttribute("src");
   els.questionImage.alt = "";
   els.prevButton.disabled = true;
+  els.markButton.disabled = true;
+  els.markButton.classList.remove("active");
   els.nextButton.disabled = true;
   els.answers.innerHTML = "";
   els.explanationBox.hidden = true;
@@ -752,6 +921,8 @@ function clearQuestionView(message = "Elige un permiso para cargar los tests.") 
   els.missValue.textContent = "-";
   els.progressBar.style.width = "0%";
   els.reviewButton.disabled = true;
+  els.markButton.disabled = true;
+  renderSummary();
 }
 
 async function loadDataset(datasetKey) {
@@ -772,6 +943,7 @@ async function loadDataset(datasetKey) {
     const progress = loadProgress(currentTest());
     state.answers = progress.answers || {};
     state.reviewed = Boolean(progress.reviewed);
+    state.marked = new Set(progress.marked || []);
     els.permitModal.hidden = true;
     render();
     showToast(`${dataset.label} cargado.`);
@@ -822,11 +994,27 @@ function bindEvents() {
   els.reviewButton.addEventListener("click", reviewTest);
   els.resetButton.addEventListener("click", resetTest);
   els.prevButton.addEventListener("click", () => selectQuestion(state.questionIndex - 1));
+  els.markButton.addEventListener("click", toggleMarkedQuestion);
   els.nextButton.addEventListener("click", () => selectQuestion(state.questionIndex + 1));
   els.searchInput.addEventListener("input", (event) => {
     state.query = event.target.value;
     state.testPage = 0;
     renderTests();
+  });
+  els.statusFilter.addEventListener("change", async (event) => {
+    state.statusFilter = event.target.value;
+    state.testPage = 0;
+    const category = currentCategory();
+    const first = filteredTests(category)[0];
+    if (first) {
+      state.testIndex = first.index;
+      await hydrateCurrentTest();
+      const progress = loadProgress(currentTest());
+      state.answers = progress.answers || {};
+      state.reviewed = Boolean(progress.reviewed);
+      state.marked = new Set(progress.marked || []);
+    }
+    render();
   });
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !els.imageModal.hidden) closeImageModal();

@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260703-5">
+    <link rel="stylesheet" href="styles.css?v=20260703-6">
   </head>
   <body>
     <div id="permitModal" class="permit-modal" role="dialog" aria-modal="true" aria-labelledby="permitTitle">
@@ -52,6 +52,18 @@
         </div>
 
         <div id="categoryTabs" class="category-tabs" role="tablist" aria-label="Categorías"></div>
+        <label class="filter-wrap">
+          <span>Vista</span>
+          <select id="statusFilter">
+            <option value="all">Todos los tests</option>
+            <option value="pending">Pendientes</option>
+            <option value="started">Empezados</option>
+            <option value="reviewed">Corregidos</option>
+            <option value="perfect">Sin fallos</option>
+            <option value="pass">2 fallos o menos</option>
+            <option value="fail">Más de 2 fallos</option>
+          </select>
+        </label>
         <div id="testList" class="test-list"></div>
       </aside>
 
@@ -102,6 +114,25 @@
           <div class="progress-track" aria-hidden="true"><div id="progressBar"></div></div>
         </section>
 
+        <section class="summary-row" aria-label="Resumen global">
+          <div>
+            <span>Tests hechos</span>
+            <strong id="doneTestsValue">0/0</strong>
+          </div>
+          <div>
+            <span>Aprobados</span>
+            <strong id="passedTestsValue">0</strong>
+          </div>
+          <div>
+            <span>Falladas</span>
+            <strong id="failedQuestionsValue">0</strong>
+          </div>
+          <div>
+            <span>Marcadas</span>
+            <strong id="markedQuestionsValue">0</strong>
+          </div>
+        </section>
+
         <section class="workspace">
           <nav id="questionRail" class="question-rail" aria-label="Preguntas"></nav>
 
@@ -111,6 +142,9 @@
               <div class="question-actions">
                 <button id="prevButton" class="icon-button" type="button" aria-label="Pregunta anterior">
                   <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <button id="markButton" class="icon-button" type="button" aria-label="Marcar pregunta">
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m12 3 2.7 5.47 6.03.88-4.36 4.25 1.03 6-5.4-2.84-5.4 2.84 1.03-6-4.36-4.25 6.03-.88L12 3Z"/></svg>
                 </button>
                 <button id="nextButton" class="icon-button" type="button" aria-label="Pregunta siguiente">
                   <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
@@ -149,6 +183,6 @@
       <img id="imageModalImg" alt="">
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260703-5"></script>
+    <script src="app.js?v=20260703-6"></script>
   </body>
 </html>
