@@ -1,6 +1,7 @@
 const DATASETS = {
   b: {
-    file: "tests_b.json",
+    file: "data/b/manifest.json",
+    basePath: "data/b",
     label: "Carnet B",
     shortLabel: "B",
     eyebrow: "Permiso B",
@@ -9,7 +10,8 @@ const DATASETS = {
     exportName: "carnet-b",
   },
   moto: {
-    file: "tests.json",
+    file: "data/moto/manifest.json",
+    basePath: "data/moto",
     label: "Moto A1/A2",
     shortLabel: "A1/A2",
     eyebrow: "Permiso moto",
@@ -32,6 +34,7 @@ const state = {
   answers: {},
   reviewed: false,
   query: "",
+  loadedPages: new Set(),
 };
 
 const els = {
@@ -92,6 +95,10 @@ function currentQuestion() {
   return currentTest()?.questions[state.questionIndex];
 }
 
+function questionsCount(test) {
+  return test?.questions_count || test?.questions?.length || 0;
+}
+
 function storageKey(test = currentTest()) {
   return test ? `${activeDataset().storagePrefix}:${publicTestId(test)}` : `${activeDataset().storagePrefix}:empty`;
 }
@@ -120,6 +127,61 @@ function allTests() {
   return state.categories.flatMap((category) => category.tests);
 }
 
+function pageKey(categoryIndex, pageIndex) {
+  return `${state.datasetKey}:${categoryIndex}:${pageIndex}`;
+}
+
+function pageIndexForTest(index) {
+  return Math.floor(index / TESTS_PER_PAGE);
+}
+
+async function hydrateCategoryPage(categoryIndex, pageIndex) {
+  const category = state.categories[categoryIndex];
+  if (!category?.page_files?.[pageIndex]) return;
+  const key = pageKey(categoryIndex, pageIndex);
+  if (state.loadedPages.has(key)) return;
+  const dataset = activeDataset();
+  const response = await fetch(`${dataset.basePath}/${category.page_files[pageIndex]}`);
+  if (!response.ok) throw new Error(`No se pudo cargar la página de tests (${response.status})`);
+  const payload = await response.json();
+  const start = pageIndex * TESTS_PER_PAGE;
+  (payload.tests || []).forEach((test, offset) => {
+    category.tests[start + offset] = {
+      ...category.tests[start + offset],
+      ...test,
+    };
+  });
+  state.loadedPages.add(key);
+}
+
+async function hydrateVisibleTests(category, tests) {
+  if (!category || category.tip === "failed") return;
+  const categoryIndex = state.categories.indexOf(category);
+  if (categoryIndex < 0) return;
+  const pages = new Set(tests.map(({ index }) => pageIndexForTest(index)));
+  await Promise.all([...pages].map((pageIndex) => hydrateCategoryPage(categoryIndex, pageIndex)));
+}
+
+async function hydrateCurrentTest() {
+  if (isFailedCategory()) return;
+  await hydrateCategoryPage(state.categoryIndex, pageIndexForTest(state.testIndex));
+}
+
+async function hydrateReviewedPages() {
+  const pages = new Map();
+  state.categories.forEach((category, categoryIndex) => {
+    category.tests.forEach((test, testIndex) => {
+      const saved = loadProgress(test);
+      if (!saved.reviewed) return;
+      if (!pages.has(categoryIndex)) pages.set(categoryIndex, new Set());
+      pages.get(categoryIndex).add(pageIndexForTest(testIndex));
+    });
+  });
+  await Promise.all([...pages.entries()].flatMap(([categoryIndex, pageIndexes]) => (
+    [...pageIndexes].map((pageIndex) => hydrateCategoryPage(categoryIndex, pageIndex))
+  )));
+}
+
 function isFailedCategory(index = state.categoryIndex) {
   return index === state.categories.length;
 }
@@ -128,7 +190,7 @@ function failedQuestions() {
   return allTests().flatMap((test) => {
     const saved = loadProgress(test);
     if (!saved.reviewed) return [];
-    return test.questions
+    return (test.questions || [])
       .filter((question) => saved.answers?.[question.question_id] && saved.answers[question.question_id] !== question.correct)
       .map((question) => ({
         ...question,
@@ -245,7 +307,7 @@ function testSubtitle(test) {
 
 function answeredCount(test = currentTest()) {
   if (!test) return 0;
-  return test.questions.filter((question) => state.answers[question.question_id]).length;
+  return (test.questions || []).filter((question) => state.answers[question.question_id]).length;
 }
 
 function score() {
@@ -253,7 +315,7 @@ function score() {
   if (!test || !state.reviewed) return { ok: "-", fail: "-" };
   let ok = 0;
   let fail = 0;
-  test.questions.forEach((question) => {
+  (test.questions || []).forEach((question) => {
     const answer = state.answers[question.question_id];
     if (!answer) return;
     if (answer === question.correct) ok += 1;
@@ -264,13 +326,15 @@ function score() {
 
 function updateReviewButtonState(test = currentTest()) {
   if (!test) return;
-  els.reviewButton.disabled = !test.questions.length || (!state.reviewed && answeredCount(test) < test.questions.length);
+  const total = questionsCount(test);
+  els.reviewButton.disabled = !total || (!state.reviewed && answeredCount(test) < total);
 }
 
 function savedResult(test, saved) {
   if (!saved?.reviewed) return null;
   let ok = 0;
   let fail = 0;
+  if (!test.questions?.length) return null;
   test.questions.forEach((question) => {
     const answer = saved.answers?.[question.question_id];
     if (!answer) return;
@@ -312,10 +376,11 @@ function closeImageModal() {
   els.imageModalImg.removeAttribute("src");
 }
 
-function switchTest(categoryIndex, testIndex) {
+async function switchTest(categoryIndex, testIndex) {
   state.categoryIndex = categoryIndex;
   state.testIndex = testIndex;
   state.questionIndex = 0;
+  await hydrateCurrentTest();
   const progress = loadProgress(currentTest());
   state.answers = progress.answers || {};
   state.reviewed = Boolean(progress.reviewed);
@@ -323,13 +388,14 @@ function switchTest(categoryIndex, testIndex) {
   render();
 }
 
-function switchTestPage(page) {
+async function switchTestPage(page) {
   const category = currentCategory();
   if (!category) return;
   const tests = filteredTests(category);
   const maxPage = Math.max(Math.ceil(tests.length / TESTS_PER_PAGE) - 1, 0);
   state.testPage = Math.max(0, Math.min(page, maxPage));
   const firstVisibleTest = tests[state.testPage * TESTS_PER_PAGE];
+  await hydrateVisibleTests(category, tests.slice(state.testPage * TESTS_PER_PAGE, state.testPage * TESTS_PER_PAGE + TESTS_PER_PAGE));
   if (firstVisibleTest) {
     state.testIndex = firstVisibleTest.index;
     state.questionIndex = 0;
@@ -410,7 +476,7 @@ function filteredTests(category) {
         test.topic_title,
         test.id,
         test.test_id,
-        ...test.questions.map((question) => question.question),
+        ...(test.questions || []).map((question) => question.question),
       ].join(" ").toLowerCase();
       return haystack.includes(query);
     });
@@ -424,11 +490,13 @@ function renderCategories() {
     button.className = `category-tab${index === state.categoryIndex ? " active" : ""}`;
     button.type = "button";
     button.textContent = categoryShortTitle(category);
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       state.categoryIndex = index;
       state.testIndex = 0;
       state.testPage = 0;
       state.questionIndex = 0;
+      if (isFailedCategory(index)) await hydrateReviewedPages();
+      else await hydrateCategoryPage(index, 0);
       const progress = loadProgress(currentTest());
       state.answers = progress.answers || {};
       state.reviewed = Boolean(progress.reviewed);
@@ -470,7 +538,10 @@ function renderTests() {
     const saved = loadProgress(test);
     const isActive = index === state.testIndex;
     const progressForCard = isActive ? { answers: state.answers, reviewed: state.reviewed } : saved;
-    const count = test.questions.filter((question) => progressForCard.answers?.[question.question_id]).length;
+    const total = questionsCount(test);
+    const count = test.questions?.length
+      ? test.questions.filter((question) => progressForCard.answers?.[question.question_id]).length
+      : Math.min(Object.keys(progressForCard.answers || {}).length, total);
     const result = savedResult(test, progressForCard);
     const button = document.createElement("button");
     button.type = "button";
@@ -480,7 +551,7 @@ function renderTests() {
       ? `${test.questions.length} preguntas`
       : [
         subtitle,
-        `${test.questions_count || test.questions.length} preguntas`,
+        `${total} preguntas`,
         `ID ${publicTestId(test)}`,
       ].filter(Boolean).join(" · ");
     button.innerHTML = `
@@ -488,7 +559,7 @@ function renderTests() {
         <strong>${testDisplayName(test)}</strong>
         <span>${details}</span>
       </span>
-      <span class="mini-score">${count}/${test.questions.length}</span>
+      <span class="mini-score">${count}/${total}</span>
     `;
     button.addEventListener("click", () => switchTest(state.categoryIndex, index));
     els.testList.appendChild(button);
@@ -529,7 +600,7 @@ function renderTests() {
 function renderQuestionRail() {
   const test = currentTest();
   els.questionRail.innerHTML = "";
-  if (!test?.questions.length) return;
+  if (!test?.questions?.length) return;
   test.questions.forEach((question, index) => {
     const answer = state.answers[question.question_id];
     const button = document.createElement("button");
@@ -606,8 +677,9 @@ function renderStats() {
   if (!test) return;
   const answered = answeredCount(test);
   const result = score();
-  const percent = test.questions.length ? Math.round((answered / test.questions.length) * 100) : 0;
-  els.progressValue.textContent = `${answered}/${test.questions.length}`;
+  const total = questionsCount(test);
+  const percent = total ? Math.round((answered / total) * 100) : 0;
+  els.progressValue.textContent = `${answered}/${total}`;
   els.scoreValue.textContent = result.ok;
   els.missValue.textContent = result.fail;
   els.progressBar.style.width = `${percent}%`;
@@ -657,6 +729,7 @@ function resetViewState() {
   state.answers = {};
   state.reviewed = false;
   state.query = "";
+  state.loadedPages = new Set();
   els.searchInput.value = "";
 }
 
@@ -695,6 +768,7 @@ async function loadDataset(datasetKey) {
     state.data = await response.json();
     state.categories = state.data.categories || [];
     if (!state.categories.length) throw new Error("El JSON no contiene categorías.");
+    await hydrateCategoryPage(0, 0);
     const progress = loadProgress(currentTest());
     state.answers = progress.answers || {};
     state.reviewed = Boolean(progress.reviewed);
