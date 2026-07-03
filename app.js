@@ -19,12 +19,15 @@ const DATASETS = {
   },
 };
 
+const TESTS_PER_PAGE = 50;
+
 const state = {
   data: null,
   datasetKey: null,
   categories: [],
   categoryIndex: 0,
   testIndex: 0,
+  testPage: 0,
   questionIndex: 0,
   answers: {},
   reviewed: false,
@@ -320,6 +323,23 @@ function switchTest(categoryIndex, testIndex) {
   render();
 }
 
+function switchTestPage(page) {
+  const category = currentCategory();
+  if (!category) return;
+  const tests = filteredTests(category);
+  const maxPage = Math.max(Math.ceil(tests.length / TESTS_PER_PAGE) - 1, 0);
+  state.testPage = Math.max(0, Math.min(page, maxPage));
+  const firstVisibleTest = tests[state.testPage * TESTS_PER_PAGE];
+  if (firstVisibleTest) {
+    state.testIndex = firstVisibleTest.index;
+    state.questionIndex = 0;
+    const progress = loadProgress(currentTest());
+    state.answers = progress.answers || {};
+    state.reviewed = Boolean(progress.reviewed);
+  }
+  render();
+}
+
 function selectQuestion(index) {
   const test = currentTest();
   if (!test) return;
@@ -407,6 +427,7 @@ function renderCategories() {
     button.addEventListener("click", () => {
       state.categoryIndex = index;
       state.testIndex = 0;
+      state.testPage = 0;
       state.questionIndex = 0;
       const progress = loadProgress(currentTest());
       state.answers = progress.answers || {};
@@ -428,7 +449,13 @@ function renderTests() {
     return;
   }
   let lastTopicKey = "";
-  filteredTests(category).forEach(({ test, index }) => {
+  const tests = filteredTests(category);
+  const pageCount = Math.max(Math.ceil(tests.length / TESTS_PER_PAGE), 1);
+  state.testPage = Math.max(0, Math.min(state.testPage, pageCount - 1));
+  const pageStart = state.testPage * TESTS_PER_PAGE;
+  const visibleTests = tests.slice(pageStart, pageStart + TESTS_PER_PAGE);
+
+  visibleTests.forEach(({ test, index }) => {
     const topicKey = test.topic_title ? `${test.topic_number}:${test.topic_title}` : "";
     if (topicKey && topicKey !== lastTopicKey) {
       const heading = document.createElement("div");
@@ -466,6 +493,30 @@ function renderTests() {
     button.addEventListener("click", () => switchTest(state.categoryIndex, index));
     els.testList.appendChild(button);
   });
+
+  if (pageCount > 1) {
+    const pager = document.createElement("div");
+    pager.className = "test-pagination";
+    const previousButton = document.createElement("button");
+    previousButton.type = "button";
+    previousButton.className = "pager-button";
+    previousButton.textContent = "Anterior";
+    previousButton.disabled = state.testPage === 0;
+    previousButton.dataset.page = String(state.testPage - 1);
+
+    const pageLabel = document.createElement("span");
+    pageLabel.textContent = `${state.testPage + 1}/${pageCount}`;
+
+    const nextButton = document.createElement("button");
+    nextButton.type = "button";
+    nextButton.className = "pager-button";
+    nextButton.textContent = "Siguiente";
+    nextButton.disabled = state.testPage >= pageCount - 1;
+    nextButton.dataset.page = String(state.testPage + 1);
+
+    pager.append(previousButton, pageLabel, nextButton);
+    els.testList.appendChild(pager);
+  }
 
   if (!els.testList.children.length) {
     const empty = document.createElement("p");
@@ -601,6 +652,7 @@ function applyDatasetBrand() {
 function resetViewState() {
   state.categoryIndex = 0;
   state.testIndex = 0;
+  state.testPage = 0;
   state.questionIndex = 0;
   state.answers = {};
   state.reviewed = false;
@@ -683,6 +735,11 @@ function bindEvents() {
     const file = event.target.files?.[0];
     if (file) importProgressFile(file);
   });
+  els.testList.addEventListener("click", (event) => {
+    const button = event.target.closest(".pager-button");
+    if (!button || button.disabled) return;
+    switchTestPage(Number(button.dataset.page));
+  });
   els.questionImage.addEventListener("click", openImageModal);
   els.imageModalClose.addEventListener("click", closeImageModal);
   els.imageModal.addEventListener("click", (event) => {
@@ -694,6 +751,7 @@ function bindEvents() {
   els.nextButton.addEventListener("click", () => selectQuestion(state.questionIndex + 1));
   els.searchInput.addEventListener("input", (event) => {
     state.query = event.target.value;
+    state.testPage = 0;
     renderTests();
   });
   window.addEventListener("keydown", (event) => {

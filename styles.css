@@ -260,6 +260,47 @@ svg {
   padding: 14px;
 }
 
+.test-pagination {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.test-pagination span {
+  min-width: 48px;
+  text-align: center;
+}
+
+.pager-button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: white;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.pager-button:hover {
+  border-color: var(--brand);
+  color: var(--brand-strong);
+}
+
+.pager-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.pager-button:disabled:hover {
+  border-color: var(--line);
+  color: var(--ink);
+}
+
 .topic-heading {
   display: grid;
   grid-template-columns: 28px 1fr;
