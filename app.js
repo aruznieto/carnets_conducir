@@ -51,7 +51,6 @@ const els = {
   brandTitle: document.getElementById("brandTitle"),
   categoryTabs: document.getElementById("categoryTabs"),
   statusFilter: document.getElementById("statusFilter"),
-  statusFilterOptions: document.getElementById("statusFilterOptions"),
   testList: document.getElementById("testList"),
   searchInput: document.getElementById("searchInput"),
   exportButton: document.getElementById("exportButton"),
@@ -655,18 +654,6 @@ function renderCategories() {
   });
 }
 
-function renderStatusFilters() {
-  els.statusFilterOptions.innerHTML = "";
-  [...els.statusFilter.options].forEach((option) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `filter-option${option.value === state.statusFilter ? " active" : ""}`;
-    button.dataset.filter = option.value;
-    button.textContent = option.textContent;
-    els.statusFilterOptions.appendChild(button);
-  });
-}
-
 async function applyStatusFilter(value) {
   state.statusFilter = value;
   els.statusFilter.value = value;
@@ -895,7 +882,6 @@ function render() {
   els.reviewButton.classList.toggle("primary", state.reviewed);
   updateReviewButtonState(test);
   renderCategories();
-  renderStatusFilters();
   renderTests();
   renderQuestion();
   renderStats();
@@ -1032,11 +1018,7 @@ function bindEvents() {
     state.testPage = 0;
     renderTests();
   });
-  els.statusFilterOptions.addEventListener("click", (event) => {
-    const button = event.target.closest(".filter-option");
-    if (!button) return;
-    applyStatusFilter(button.dataset.filter);
-  });
+  els.statusFilter.addEventListener("change", (event) => applyStatusFilter(event.target.value));
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !els.imageModal.hidden) closeImageModal();
     if (event.key === "ArrowLeft") selectQuestion(state.questionIndex - 1);

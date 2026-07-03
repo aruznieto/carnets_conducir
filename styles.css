@@ -252,6 +252,7 @@ svg {
 }
 
 .filter-wrap {
+  position: relative;
   display: grid;
   gap: 6px;
   margin-bottom: 16px;
@@ -264,37 +265,36 @@ svg {
   text-transform: uppercase;
 }
 
-.filter-options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.filter-option {
-  min-height: 38px;
+.filter-wrap select {
+  width: 100%;
+  min-height: 46px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: white;
-  color: var(--muted);
-  padding: 0 10px;
-  font-size: 12px;
+  color: var(--ink);
+  appearance: none;
+  padding: 0 42px 0 12px;
+  font-size: 14px;
   font-weight: 800;
-  text-align: center;
+  outline: 0;
 }
 
-.filter-option:first-child {
-  grid-column: 1 / -1;
-}
-
-.filter-option:hover {
+.filter-wrap select:hover,
+.filter-wrap select:focus {
   border-color: var(--brand);
-  color: var(--brand-strong);
 }
 
-.filter-option.active {
-  border-color: var(--brand);
-  background: #e8f4f1;
-  color: var(--brand-strong);
+.filter-wrap::after {
+  content: "";
+  position: absolute;
+  right: 14px;
+  bottom: 17px;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  pointer-events: none;
+  transform: rotate(45deg);
 }
 
 .test-list {

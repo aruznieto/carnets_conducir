@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260703-7">
+    <link rel="stylesheet" href="styles.css?v=20260703-8">
   </head>
   <body>
     <div id="permitModal" class="permit-modal" role="dialog" aria-modal="true" aria-labelledby="permitTitle">
@@ -54,7 +54,7 @@
         <div id="categoryTabs" class="category-tabs" role="tablist" aria-label="Categorías"></div>
         <div class="filter-wrap">
           <span>Vista</span>
-          <select id="statusFilter" hidden>
+          <select id="statusFilter">
             <option value="all">Todos los tests</option>
             <option value="pending">Pendientes</option>
             <option value="started">Empezados</option>
@@ -63,7 +63,6 @@
             <option value="pass">2 fallos o menos</option>
             <option value="fail">Más de 2 fallos</option>
           </select>
-          <div id="statusFilterOptions" class="filter-options" role="group" aria-label="Filtrar tests"></div>
         </div>
         <div id="testList" class="test-list"></div>
       </aside>
@@ -184,6 +183,6 @@
       <img id="imageModalImg" alt="">
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260703-7"></script>
+    <script src="app.js?v=20260703-8"></script>
   </body>
 </html>
