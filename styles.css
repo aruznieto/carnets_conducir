@@ -450,6 +450,11 @@ svg {
   padding: 0 12px;
 }
 
+#changePermitButton svg {
+  width: 26px;
+  height: 26px;
+}
+
 .ghost-button.primary,
 .ghost-button:hover,
 .icon-button:hover {
@@ -874,11 +879,6 @@ svg {
     width: 44px;
     min-height: 44px;
     flex: 0 0 44px;
-  }
-
-  #changePermitButton svg {
-    width: 26px;
-    height: 26px;
   }
 
   .stats-row {
