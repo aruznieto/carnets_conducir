@@ -870,6 +870,17 @@ svg {
     font-size: 0;
   }
 
+  #changePermitButton {
+    width: 56px;
+    min-height: 50px;
+    flex: 0 0 56px;
+  }
+
+  #changePermitButton svg {
+    width: 26px;
+    height: 26px;
+  }
+
   .stats-row {
     grid-template-columns: 1fr;
   }
