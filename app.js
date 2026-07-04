@@ -42,6 +42,7 @@ const state = {
   searchMatches: null,
   mockTest: null,
   quickReviewTest: null,
+  view: "study",
 };
 
 const els = {
@@ -64,7 +65,11 @@ const els = {
   changePermitButton: document.getElementById("changePermitButton"),
   mockButton: document.getElementById("mockButton"),
   quickReviewButton: document.getElementById("quickReviewButton"),
+  statsButton: document.getElementById("statsButton"),
   syncButton: document.getElementById("syncButton"),
+  studyView: document.getElementById("studyView"),
+  statsPage: document.getElementById("statsPage"),
+  backToTestButton: document.getElementById("backToTestButton"),
   categoryLabel: document.getElementById("categoryLabel"),
   testTitle: document.getElementById("testTitle"),
   reviewButton: document.getElementById("reviewButton"),
@@ -677,6 +682,23 @@ function topicTone(topic) {
   return "bad";
 }
 
+function showStudyView() {
+  state.view = "study";
+  els.studyView.hidden = false;
+  els.statsPage.hidden = true;
+  els.statsButton.classList.remove("primary");
+}
+
+function showStatsView() {
+  state.view = "stats";
+  renderSummary();
+  renderTopicStats();
+  els.studyView.hidden = true;
+  els.statsPage.hidden = false;
+  els.statsButton.classList.add("primary");
+  openSidebar(false);
+}
+
 async function startMockExam() {
   try {
     showToast("Preparando simulacro...");
@@ -721,6 +743,7 @@ async function startMockExam() {
     state.answers = {};
     state.reviewed = false;
     state.marked = new Set();
+    showStudyView();
     openSidebar(false);
     render();
     showToast("Simulacro listo.");
@@ -768,6 +791,7 @@ async function startQuickReview() {
     state.answers = {};
     state.reviewed = false;
     state.marked = new Set();
+    showStudyView();
     openSidebar(false);
     render();
     showToast("Repaso listo.");
@@ -817,6 +841,7 @@ async function switchTest(categoryIndex, testIndex) {
   state.answers = progress.answers || {};
   state.reviewed = Boolean(progress.reviewed);
   state.marked = new Set(progress.marked || []);
+  showStudyView();
   openSidebar(false);
   render();
 }
@@ -837,6 +862,7 @@ async function switchTestPage(page) {
     state.reviewed = Boolean(progress.reviewed);
     state.marked = new Set(progress.marked || []);
   }
+  showStudyView();
   render();
 }
 
@@ -973,6 +999,7 @@ function renderCategories() {
       state.answers = progress.answers || {};
       state.reviewed = Boolean(progress.reviewed);
       state.marked = new Set(progress.marked || []);
+      showStudyView();
       render();
     });
     els.categoryTabs.appendChild(button);
@@ -993,6 +1020,7 @@ async function applyStatusFilter(value) {
     state.reviewed = Boolean(progress.reviewed);
     state.marked = new Set(progress.marked || []);
   }
+  showStudyView();
   render();
 }
 
@@ -1090,27 +1118,41 @@ function renderTests() {
 }
 
 function renderTopicStats() {
-  const category = currentCategory();
-  const isTopics = category && !isSpecialCategory(category) && category.tests.some((test) => test.topic_title);
-  els.topicStats.hidden = !isTopics;
-  if (!isTopics) {
+  const categories = state.categories
+    .filter((category) => (
+      !isSpecialCategory(category) && category.tests.some((test) => test.topic_title)
+    ))
+    .map((category) => ({ category, topics: topicSummary(category) }));
+  els.topicStats.hidden = !categories.length;
+  if (!categories.length) {
     els.topicStats.innerHTML = "";
     return;
   }
-  const topics = topicSummary(category);
+  const doneTopics = categories.reduce((total, item) => total + item.topics.filter((topic) => topic.done).length, 0);
+  const totalTopics = categories.reduce((total, item) => total + item.topics.length, 0);
   els.topicStats.innerHTML = `
     <div class="topic-stats-head">
       <span>Rendimiento por tema</span>
-      <strong>${topics.filter((topic) => topic.done).length}/${topics.length}</strong>
+      <strong>${doneTopics}/${totalTopics}</strong>
     </div>
-    <div class="topic-stats-grid">
-      ${topics.map((topic) => `
-        <div class="topic-stat ${topicTone(topic)}">
-          <strong>${topic.title}</strong>
-          <span>${topic.done}/${topic.total} tests · ${topic.passed} aprobados · ${topic.failedQuestions} fallos</span>
+    ${categories.map(({ category, topics }) => {
+      return `
+        <div class="topic-stats-section">
+          <div class="topic-stats-title">
+            <strong>${categoryShortTitle(category)}</strong>
+            <span>${topics.filter((topic) => topic.done).length}/${topics.length} temas con tests hechos</span>
+          </div>
+          <div class="topic-stats-grid">
+            ${topics.map((topic) => `
+              <div class="topic-stat ${topicTone(topic)}">
+                <strong>${topic.title}</strong>
+                <span>${topic.done}/${topic.total} tests · ${topic.passed} aprobados · ${topic.failedQuestions} fallos</span>
+              </div>
+            `).join("")}
+          </div>
         </div>
-      `).join("")}
-    </div>
+      `;
+    }).join("")}
   `;
 }
 
@@ -1237,7 +1279,7 @@ function render() {
   updateReviewButtonState(test);
   renderCategories();
   renderTests();
-  renderTopicStats();
+  if (state.view === "stats") renderTopicStats();
   renderQuestion();
   renderStats();
 }
@@ -1273,6 +1315,7 @@ function resetViewState() {
   state.searchMatches = null;
   state.mockTest = null;
   state.quickReviewTest = null;
+  showStudyView();
   els.searchInput.value = "";
   els.statusFilter.value = "all";
 }
@@ -1300,6 +1343,7 @@ function clearQuestionView(message = "Elige un permiso para cargar los tests.") 
   els.reviewButton.disabled = true;
   els.markButton.disabled = true;
   renderSummary();
+  renderTopicStats();
 }
 
 async function loadDataset(datasetKey) {
@@ -1362,6 +1406,8 @@ function bindEvents() {
   els.changePermitButton.addEventListener("click", showPermitModal);
   els.mockButton.addEventListener("click", startMockExam);
   els.quickReviewButton.addEventListener("click", startQuickReview);
+  els.statsButton.addEventListener("click", showStatsView);
+  els.backToTestButton.addEventListener("click", showStudyView);
   els.syncButton.addEventListener("click", syncProgress);
   els.exportButton.addEventListener("click", exportProgress);
   els.importButton.addEventListener("click", () => els.importFile.click());

@@ -1,8 +1,8 @@
-const CACHE_NAME = "carnets-conducir-v20260704-3";
+const CACHE_NAME = "carnets-conducir-v20260704-4";
 const APP_SHELL = [
   "index.html",
-  "styles.css?v=20260704-3",
-  "app.js?v=20260704-3",
+  "styles.css?v=20260704-4",
+  "app.js?v=20260704-4",
   "manifest.webmanifest",
   "icon.svg",
   "data/b/manifest.json",
