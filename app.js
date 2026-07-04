@@ -42,6 +42,8 @@ const state = {
   searchMatches: null,
   mockTest: null,
   quickReviewTest: null,
+  quickReviewPool: [],
+  quickReviewStats: { ok: 0, fail: 0, answered: 0 },
   view: "study",
 };
 
@@ -62,6 +64,8 @@ const els = {
   exportButton: document.getElementById("exportButton"),
   importButton: document.getElementById("importButton"),
   importFile: document.getElementById("importFile"),
+  actionsButton: document.getElementById("actionsButton"),
+  actionsMenu: document.getElementById("actionsMenu"),
   changePermitButton: document.getElementById("changePermitButton"),
   mockButton: document.getElementById("mockButton"),
   quickReviewButton: document.getElementById("quickReviewButton"),
@@ -142,7 +146,7 @@ function loadProgress(test) {
 }
 
 function saveProgress() {
-  if (isMockCategory()) return;
+  if (isMockCategory() || isQuickReviewCategory()) return;
   const result = state.reviewed ? score() : null;
   localStorage.setItem(storageKey(), JSON.stringify({
     answers: state.answers,
@@ -569,6 +573,9 @@ function answeredCount(test = currentTest()) {
 
 function score() {
   const test = currentTest();
+  if (isQuickReviewCategory()) {
+    return { ok: state.quickReviewStats.ok, fail: state.quickReviewStats.fail };
+  }
   if (!test || (!state.reviewed && !isQuickReviewCategory())) return { ok: "-", fail: "-" };
   let ok = 0;
   let fail = 0;
@@ -583,6 +590,10 @@ function score() {
 
 function updateReviewButtonState(test = currentTest()) {
   if (!test) return;
+  if (isQuickReviewCategory()) {
+    els.reviewButton.disabled = true;
+    return;
+  }
   const total = questionsCount(test);
   els.reviewButton.disabled = !total || (!state.reviewed && answeredCount(test) < total);
 }
@@ -699,6 +710,50 @@ function showStatsView() {
   openSidebar(false);
 }
 
+function setActionsMenu(open) {
+  els.actionsMenu.hidden = !open;
+  els.actionsButton.setAttribute("aria-expanded", String(open));
+}
+
+function closeActionsMenu() {
+  setActionsMenu(false);
+}
+
+function quickReviewQuestionKey(question) {
+  return `${question.origin_test_id}:${question.original_question_id || question.question_id}`;
+}
+
+function nextQuickReviewQuestion() {
+  if (!state.quickReviewPool.length) return null;
+  const currentKey = currentQuestion() ? quickReviewQuestionKey(currentQuestion()) : "";
+  const pool = state.quickReviewPool.length > 1
+    ? state.quickReviewPool.filter((question) => quickReviewQuestionKey(question) !== currentKey)
+    : state.quickReviewPool;
+  const source = pool[Math.floor(Math.random() * pool.length)];
+  return {
+    ...source,
+    question_id: `quick:${Date.now()}:${Math.random().toString(36).slice(2)}:${source.original_question_id || source.question_id}`,
+  };
+}
+
+function showNextQuickReviewQuestion() {
+  const question = nextQuickReviewQuestion();
+  if (!question) {
+    showToast("No hay preguntas de repaso disponibles.");
+    return;
+  }
+  state.quickReviewTest = {
+    id: "repaso",
+    test_id: "repaso",
+    questions_count: state.quickReviewStats.answered + 1,
+    questions: [question],
+  };
+  state.questionIndex = 0;
+  state.answers = {};
+  state.reviewed = false;
+  render();
+}
+
 async function startMockExam() {
   try {
     showToast("Preparando simulacro...");
@@ -767,19 +822,9 @@ async function startQuickReview() {
       showToast("No tienes falladas ni marcadas para repasar.");
       return;
     }
-    const questions = candidates
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 20)
-      .map((question, index) => ({
-        ...question,
-        question_id: `quick:${Date.now()}:${index}:${question.original_question_id || question.question_id}`,
-      }));
-    state.quickReviewTest = {
-      id: "repaso",
-      test_id: "repaso",
-      questions_count: questions.length,
-      questions,
-    };
+    state.quickReviewPool = candidates;
+    state.quickReviewStats = { ok: 0, fail: 0, answered: 0 };
+    state.quickReviewTest = null;
     state.categoryIndex = state.categories.length + 3;
     state.testIndex = 0;
     state.testPage = 0;
@@ -793,8 +838,8 @@ async function startQuickReview() {
     state.marked = new Set();
     showStudyView();
     openSidebar(false);
-    render();
-    showToast("Repaso listo.");
+    showNextQuickReviewQuestion();
+    showToast("Repaso iniciado.");
   } catch (error) {
     showToast(error.message || "No se pudo preparar el repaso.");
   }
@@ -888,15 +933,14 @@ function answerQuestion(letter) {
   state.answers[question.question_id] = letter;
   saveProgress();
   if (isQuickReviewCategory()) {
+    state.quickReviewStats.answered += 1;
+    if (letter === question.correct) state.quickReviewStats.ok += 1;
+    else state.quickReviewStats.fail += 1;
     renderQuestion();
     renderStats();
     window.setTimeout(() => {
       if (!isQuickReviewCategory()) return;
-      if (state.questionIndex < (currentTest()?.questions.length || 0) - 1) {
-        state.questionIndex += 1;
-        renderQuestion();
-        renderStats();
-      }
+      showNextQuickReviewQuestion();
     }, 650);
     return;
   }
@@ -1231,14 +1275,25 @@ function renderQuestion() {
   });
 
   const showExplanation = state.reviewed && question.explanation;
-  els.explanationBox.hidden = !showExplanation;
-  els.explanationText.textContent = showExplanation ? question.explanation : "";
+  const showQuickExplanation = isQuickReviewCategory() && selected && question.explanation;
+  els.explanationBox.hidden = !(showExplanation || showQuickExplanation);
+  els.explanationText.textContent = showExplanation || showQuickExplanation ? question.explanation : "";
   renderQuestionRail();
 }
 
 function renderStats() {
   const test = currentTest();
   if (!test) return;
+  if (isQuickReviewCategory()) {
+    const result = score();
+    els.progressValue.textContent = `${state.quickReviewStats.answered} preguntas`;
+    els.scoreValue.textContent = result.ok;
+    els.missValue.textContent = result.fail;
+    els.progressBar.style.width = state.quickReviewStats.answered ? "100%" : "0%";
+    renderSummary();
+    updateReviewButtonState(test);
+    return;
+  }
   const answered = answeredCount(test);
   const result = score();
   const total = questionsCount(test);
@@ -1269,7 +1324,7 @@ function render() {
     : category.tip === "mock"
       ? `${questionsCount(test)} preguntas aleatorias`
     : category.tip === "quick"
-      ? `${questionsCount(test)} preguntas de repaso`
+      ? `${state.quickReviewStats.answered} contestadas`
     : `${category.title || "Tests"} · ${category.tests.length} tests`;
   els.testTitle.textContent = testDisplayName(test);
   if (test.topic_title && category.tip !== "failed") {
@@ -1315,6 +1370,8 @@ function resetViewState() {
   state.searchMatches = null;
   state.mockTest = null;
   state.quickReviewTest = null;
+  state.quickReviewPool = [];
+  state.quickReviewStats = { ok: 0, fail: 0, answered: 0 };
   showStudyView();
   els.searchInput.value = "";
   els.statusFilter.value = "all";
@@ -1403,12 +1460,30 @@ function bindEvents() {
   });
   els.menuButton.addEventListener("click", () => openSidebar(true));
   els.scrim.addEventListener("click", () => openSidebar(false));
-  els.changePermitButton.addEventListener("click", showPermitModal);
-  els.mockButton.addEventListener("click", startMockExam);
-  els.quickReviewButton.addEventListener("click", startQuickReview);
+  els.actionsButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setActionsMenu(els.actionsMenu.hidden);
+  });
+  els.actionsMenu.addEventListener("click", (event) => event.stopPropagation());
+  document.addEventListener("click", closeActionsMenu);
+  els.changePermitButton.addEventListener("click", () => {
+    closeActionsMenu();
+    showPermitModal();
+  });
+  els.mockButton.addEventListener("click", () => {
+    closeActionsMenu();
+    startMockExam();
+  });
+  els.quickReviewButton.addEventListener("click", () => {
+    closeActionsMenu();
+    startQuickReview();
+  });
   els.statsButton.addEventListener("click", showStatsView);
   els.backToTestButton.addEventListener("click", showStudyView);
-  els.syncButton.addEventListener("click", syncProgress);
+  els.syncButton.addEventListener("click", () => {
+    closeActionsMenu();
+    syncProgress();
+  });
   els.exportButton.addEventListener("click", exportProgress);
   els.importButton.addEventListener("click", () => els.importFile.click());
   els.importFile.addEventListener("change", (event) => {
@@ -1443,6 +1518,7 @@ function bindEvents() {
   });
   els.statusFilter.addEventListener("change", (event) => applyStatusFilter(event.target.value));
   window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeActionsMenu();
     if (event.key === "Escape" && !els.imageModal.hidden) closeImageModal();
     if (event.key === "ArrowLeft") selectQuestion(state.questionIndex - 1);
     if (event.key === "ArrowRight") selectQuestion(state.questionIndex + 1);

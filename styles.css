@@ -503,9 +503,59 @@ svg {
   padding: 0 12px;
 }
 
-#changePermitButton svg {
+#actionsButton svg {
   width: 26px;
   height: 26px;
+}
+
+.actions-dropdown {
+  position: relative;
+}
+
+.actions-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: white;
+  padding: 6px;
+  box-shadow: 0 18px 40px rgba(15, 36, 31, 0.16);
+}
+
+.actions-menu[hidden] {
+  display: none;
+}
+
+.actions-menu button {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: calc(var(--radius) - 4px);
+  background: transparent;
+  color: var(--ink);
+  padding: 0 10px;
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+}
+
+.actions-menu button:hover {
+  background: #eef6f3;
+  color: var(--brand-strong);
+}
+
+.actions-menu svg {
+  width: 24px;
+  height: 24px;
 }
 
 .ghost-button.primary,
@@ -1099,10 +1149,14 @@ svg {
     font-size: 0;
   }
 
-  #changePermitButton {
+  #actionsButton {
     width: 44px;
     min-height: 44px;
     flex: 0 0 44px;
+  }
+
+  .actions-menu {
+    min-width: min(240px, calc(100vw - 28px));
   }
 
   .stats-row {
