@@ -41,6 +41,7 @@ const state = {
   searchIndexLoading: null,
   searchMatches: null,
   mockTest: null,
+  quickReviewTest: null,
 };
 
 const els = {
@@ -62,6 +63,8 @@ const els = {
   importFile: document.getElementById("importFile"),
   changePermitButton: document.getElementById("changePermitButton"),
   mockButton: document.getElementById("mockButton"),
+  quickReviewButton: document.getElementById("quickReviewButton"),
+  syncButton: document.getElementById("syncButton"),
   categoryLabel: document.getElementById("categoryLabel"),
   testTitle: document.getElementById("testTitle"),
   reviewButton: document.getElementById("reviewButton"),
@@ -100,6 +103,7 @@ function currentCategory() {
   if (isFailedCategory()) return failedCategory();
   if (isMarkedCategory()) return markedCategory();
   if (isMockCategory()) return mockCategory();
+  if (isQuickReviewCategory()) return quickReviewCategory();
   return state.categories[state.categoryIndex];
 }
 
@@ -192,7 +196,7 @@ async function hydrateVisibleTests(category, tests) {
 }
 
 async function hydrateCurrentTest() {
-  if (isFailedCategory() || isMarkedCategory() || isMockCategory()) return;
+  if (isFailedCategory() || isMarkedCategory() || isMockCategory() || isQuickReviewCategory()) return;
   await hydrateCategoryPage(state.categoryIndex, pageIndexForTest(state.testIndex));
 }
 
@@ -271,8 +275,12 @@ function isMockCategory(index = state.categoryIndex) {
   return index === state.categories.length + 2;
 }
 
+function isQuickReviewCategory(index = state.categoryIndex) {
+  return index === state.categories.length + 3;
+}
+
 function isSpecialCategory(category) {
-  return ["failed", "marked", "mock"].includes(category?.tip);
+  return ["failed", "marked", "mock", "quick"].includes(category?.tip);
 }
 
 function failedQuestions() {
@@ -351,7 +359,26 @@ function mockCategory() {
   };
 }
 
+function quickReviewCategory() {
+  return {
+    title: "Repaso rápido",
+    tip: "quick",
+    tests: [state.quickReviewTest || {
+      id: "repaso",
+      test_id: "repaso",
+      questions_count: 0,
+      questions: [],
+    }],
+  };
+}
+
 function exportProgress() {
+  const payload = progressPayload();
+  downloadProgressPayload(payload);
+  showToast("Progreso descargado.");
+}
+
+function progressPayload() {
   const progress = {};
   allTests().forEach((test) => {
     const saved = loadProgress(test);
@@ -368,13 +395,16 @@ function exportProgress() {
     progress.marcadas = markedProgress;
   }
 
-  const payload = {
+  return {
     app: activeDataset().exportName,
     permit: state.datasetKey,
     version: 1,
     exported_at: new Date().toISOString(),
     progress,
   };
+}
+
+function downloadProgressPayload(payload) {
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -384,38 +414,115 @@ function exportProgress() {
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  showToast("Progreso descargado.");
 }
 
 async function importProgressFile(file) {
   try {
     const payload = JSON.parse(await file.text());
-    const progress = payload.progress && typeof payload.progress === "object" ? payload.progress : payload;
-    const knownIds = new Set([...allTests().map(publicTestId), "falladas", "marcadas"]);
-    let imported = 0;
-
-    Object.entries(progress).forEach(([id, value]) => {
-      if (!knownIds.has(id) || !value || typeof value !== "object") return;
-      const answers = value.answers && typeof value.answers === "object" ? value.answers : {};
-      localStorage.setItem(`${activeDataset().storagePrefix}:${id}`, JSON.stringify({
-        answers,
-        reviewed: Boolean(value.reviewed),
-        marked: Array.isArray(value.marked) ? value.marked : [],
-        result: value.result || null,
-      }));
-      imported += 1;
-    });
-
-    const activeProgress = loadProgress(currentTest());
-    state.answers = activeProgress.answers || {};
-    state.reviewed = Boolean(activeProgress.reviewed);
-    render();
+    const imported = applyProgressPayload(payload);
     showToast(imported ? `Progreso cargado: ${imported} tests.` : "No había progreso compatible en el archivo.");
   } catch {
     showToast("No se pudo cargar el archivo.");
   } finally {
     els.importFile.value = "";
   }
+}
+
+function applyProgressPayload(payload) {
+  const progress = payload.progress && typeof payload.progress === "object" ? payload.progress : payload;
+  const knownIds = new Set([...allTests().map(publicTestId), "falladas", "marcadas"]);
+  let imported = 0;
+  Object.entries(progress).forEach(([id, value]) => {
+    if (!knownIds.has(id) || !value || typeof value !== "object") return;
+    const answers = value.answers && typeof value.answers === "object" ? value.answers : {};
+    localStorage.setItem(`${activeDataset().storagePrefix}:${id}`, JSON.stringify({
+      answers,
+      reviewed: Boolean(value.reviewed),
+      marked: Array.isArray(value.marked) ? value.marked : [],
+      result: value.result || null,
+    }));
+    imported += 1;
+  });
+  const activeProgress = loadProgress(currentTest());
+  state.answers = activeProgress.answers || {};
+  state.reviewed = Boolean(activeProgress.reviewed);
+  state.marked = new Set(activeProgress.marked || []);
+  render();
+  return imported;
+}
+
+function syncStorageKey(name) {
+  return `${activeDataset().storagePrefix}:sync:${name}`;
+}
+
+function getSyncConfig() {
+  const token = window.prompt("Token de GitHub para Gist privado:", localStorage.getItem(syncStorageKey("token")) || "");
+  if (!token) return null;
+  const gistId = window.prompt("Gist ID. Déjalo vacío para crear uno nuevo al subir:", localStorage.getItem(syncStorageKey("gist")) || "");
+  localStorage.setItem(syncStorageKey("token"), token);
+  if (gistId) localStorage.setItem(syncStorageKey("gist"), gistId);
+  return { token, gistId };
+}
+
+async function syncProgress() {
+  const config = getSyncConfig();
+  if (!config) return;
+  const upload = window.confirm("Aceptar: subir progreso a la nube. Cancelar: descargar progreso desde la nube.");
+  try {
+    if (upload) {
+      const gistId = await uploadProgressToGist(config);
+      localStorage.setItem(syncStorageKey("gist"), gistId);
+      showToast("Progreso sincronizado.");
+    } else {
+      if (!config.gistId) {
+        showToast("Necesitas un Gist ID para descargar.");
+        return;
+      }
+      const payload = await downloadProgressFromGist(config);
+      const imported = applyProgressPayload(payload);
+      showToast(imported ? `Progreso sincronizado: ${imported} tests.` : "No había progreso compatible.");
+    }
+  } catch (error) {
+    showToast(error.message || "No se pudo sincronizar.");
+  }
+}
+
+async function uploadProgressToGist({ token, gistId }) {
+  const filename = `${activeDataset().exportName}-progress.json`;
+  const body = {
+    description: `Progreso ${activeDataset().label}`,
+    public: false,
+    files: {
+      [filename]: { content: JSON.stringify(progressPayload(), null, 2) },
+    },
+  };
+  const response = await fetch(gistId ? `https://api.github.com/gists/${gistId}` : "https://api.github.com/gists", {
+    method: gistId ? "PATCH" : "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Accept": "application/vnd.github+json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`GitHub rechazó la sincronización (${response.status}).`);
+  const gist = await response.json();
+  return gist.id;
+}
+
+async function downloadProgressFromGist({ token, gistId }) {
+  const response = await fetch(`https://api.github.com/gists/${gistId}`, {
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Accept": "application/vnd.github+json",
+    },
+  });
+  if (!response.ok) throw new Error(`No se pudo leer el Gist (${response.status}).`);
+  const gist = await response.json();
+  const file = Object.values(gist.files || {}).find((item) => item.filename === `${activeDataset().exportName}-progress.json`)
+    || Object.values(gist.files || {}).find((item) => item.filename.endsWith("-progress.json"));
+  if (!file?.content) throw new Error("El Gist no contiene progreso.");
+  return JSON.parse(file.content);
 }
 
 function imageSrc(image) {
@@ -442,6 +549,7 @@ function testDisplayName(test) {
   if (publicTestId(test) === "falladas") return "Preguntas falladas";
   if (publicTestId(test) === "marcadas") return "Preguntas marcadas";
   if (publicTestId(test) === "simulacro") return "Simulacro";
+  if (publicTestId(test) === "repaso") return "Repaso rápido";
   return `Test ${publicTestId(test)}`;
 }
 
@@ -456,7 +564,7 @@ function answeredCount(test = currentTest()) {
 
 function score() {
   const test = currentTest();
-  if (!test || !state.reviewed) return { ok: "-", fail: "-" };
+  if (!test || (!state.reviewed && !isQuickReviewCategory())) return { ok: "-", fail: "-" };
   let ok = 0;
   let fail = 0;
   (test.questions || []).forEach((question) => {
@@ -621,6 +729,53 @@ async function startMockExam() {
   }
 }
 
+async function startQuickReview() {
+  try {
+    showToast("Preparando repaso...");
+    await Promise.all([hydrateReviewedPages(), hydrateMarkedPages()]);
+    const seen = new Set();
+    const candidates = [...failedQuestions(), ...markedQuestions()].filter((question) => {
+      const key = `${question.origin_test_id}:${question.original_question_id || question.question_id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    if (!candidates.length) {
+      showToast("No tienes falladas ni marcadas para repasar.");
+      return;
+    }
+    const questions = candidates
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 20)
+      .map((question, index) => ({
+        ...question,
+        question_id: `quick:${Date.now()}:${index}:${question.original_question_id || question.question_id}`,
+      }));
+    state.quickReviewTest = {
+      id: "repaso",
+      test_id: "repaso",
+      questions_count: questions.length,
+      questions,
+    };
+    state.categoryIndex = state.categories.length + 3;
+    state.testIndex = 0;
+    state.testPage = 0;
+    state.questionIndex = 0;
+    state.query = "";
+    state.statusFilter = "all";
+    els.searchInput.value = "";
+    els.statusFilter.value = "all";
+    state.answers = {};
+    state.reviewed = false;
+    state.marked = new Set();
+    openSidebar(false);
+    render();
+    showToast("Repaso listo.");
+  } catch (error) {
+    showToast(error.message || "No se pudo preparar el repaso.");
+  }
+}
+
 function resultClass(result) {
   if (!result) return "";
   if (result.fail === 0) return " result-perfect";
@@ -706,6 +861,19 @@ function answerQuestion(letter) {
   if (!question) return;
   state.answers[question.question_id] = letter;
   saveProgress();
+  if (isQuickReviewCategory()) {
+    renderQuestion();
+    renderStats();
+    window.setTimeout(() => {
+      if (!isQuickReviewCategory()) return;
+      if (state.questionIndex < (currentTest()?.questions.length || 0) - 1) {
+        state.questionIndex += 1;
+        renderQuestion();
+        renderStats();
+      }
+    }, 650);
+    return;
+  }
   if (test?.questions?.length && state.questionIndex < test.questions.length - 1 && !state.reviewed) {
     state.questionIndex += 1;
   }
@@ -957,7 +1125,7 @@ function renderQuestionRail() {
     button.className = "question-dot";
     if (index === state.questionIndex) button.classList.add("active");
     if (answer) button.classList.add("answered");
-    if (state.reviewed && answer) {
+  if ((state.reviewed || isQuickReviewCategory()) && answer) {
       button.classList.add(answer === question.correct ? "correct" : "wrong");
     }
     button.textContent = String(index + 1);
@@ -986,7 +1154,7 @@ function renderQuestion() {
     return;
   }
 
-  const specialOrigin = ["falladas", "marcadas", "simulacro"].includes(publicTestId(test)) && question.origin_test_title
+  const specialOrigin = ["falladas", "marcadas", "simulacro", "repaso"].includes(publicTestId(test)) && question.origin_test_title
     ? `${question.origin_test_title} · `
     : "";
   els.questionCounter.textContent = `${specialOrigin}Pregunta ${state.questionIndex + 1} de ${test.questions.length}`;
@@ -997,7 +1165,7 @@ function renderQuestion() {
   els.prevButton.disabled = state.questionIndex === 0;
   els.nextButton.disabled = state.questionIndex === test.questions.length - 1;
   const markId = question.original_question_id || question.question_id;
-  els.markButton.disabled = ["falladas", "marcadas", "simulacro"].includes(publicTestId(test));
+  els.markButton.disabled = ["falladas", "marcadas", "simulacro", "repaso"].includes(publicTestId(test));
   els.markButton.classList.toggle("active", state.marked.has(markId));
 
   els.answers.innerHTML = "";
@@ -1007,7 +1175,7 @@ function renderQuestion() {
     button.type = "button";
     button.className = "answer-button";
     if (selected === answer.letter) button.classList.add("selected");
-    if (state.reviewed) {
+    if (state.reviewed || (isQuickReviewCategory() && selected)) {
       if (answer.letter === question.correct) button.classList.add("correct");
       if (selected === answer.letter && selected !== question.correct) button.classList.add("wrong");
       button.disabled = true;
@@ -1058,6 +1226,8 @@ function render() {
     ? `${test.questions.length} preguntas`
     : category.tip === "mock"
       ? `${questionsCount(test)} preguntas aleatorias`
+    : category.tip === "quick"
+      ? `${questionsCount(test)} preguntas de repaso`
     : `${category.title || "Tests"} · ${category.tests.length} tests`;
   els.testTitle.textContent = testDisplayName(test);
   if (test.topic_title && category.tip !== "failed") {
@@ -1102,6 +1272,7 @@ function resetViewState() {
   state.searchIndexLoading = null;
   state.searchMatches = null;
   state.mockTest = null;
+  state.quickReviewTest = null;
   els.searchInput.value = "";
   els.statusFilter.value = "all";
 }
@@ -1190,6 +1361,8 @@ function bindEvents() {
   els.scrim.addEventListener("click", () => openSidebar(false));
   els.changePermitButton.addEventListener("click", showPermitModal);
   els.mockButton.addEventListener("click", startMockExam);
+  els.quickReviewButton.addEventListener("click", startQuickReview);
+  els.syncButton.addEventListener("click", syncProgress);
   els.exportButton.addEventListener("click", exportProgress);
   els.importButton.addEventListener("click", () => els.importFile.click());
   els.importFile.addEventListener("change", (event) => {
