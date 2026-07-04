@@ -37,6 +37,10 @@ const state = {
   loadedPages: new Set(),
   marked: new Set(),
   statusFilter: "all",
+  searchIndex: null,
+  searchIndexLoading: null,
+  searchMatches: null,
+  mockTest: null,
 };
 
 const els = {
@@ -57,6 +61,7 @@ const els = {
   importButton: document.getElementById("importButton"),
   importFile: document.getElementById("importFile"),
   changePermitButton: document.getElementById("changePermitButton"),
+  mockButton: document.getElementById("mockButton"),
   categoryLabel: document.getElementById("categoryLabel"),
   testTitle: document.getElementById("testTitle"),
   reviewButton: document.getElementById("reviewButton"),
@@ -68,6 +73,7 @@ const els = {
   passedTestsValue: document.getElementById("passedTestsValue"),
   failedQuestionsValue: document.getElementById("failedQuestionsValue"),
   markedQuestionsValue: document.getElementById("markedQuestionsValue"),
+  topicStats: document.getElementById("topicStats"),
   progressBar: document.getElementById("progressBar"),
   questionRail: document.getElementById("questionRail"),
   questionCounter: document.getElementById("questionCounter"),
@@ -93,6 +99,7 @@ function activeDataset() {
 function currentCategory() {
   if (isFailedCategory()) return failedCategory();
   if (isMarkedCategory()) return markedCategory();
+  if (isMockCategory()) return mockCategory();
   return state.categories[state.categoryIndex];
 }
 
@@ -126,6 +133,7 @@ function loadProgress(test) {
 }
 
 function saveProgress() {
+  if (isMockCategory()) return;
   const result = state.reviewed ? score() : null;
   localStorage.setItem(storageKey(), JSON.stringify({
     answers: state.answers,
@@ -176,7 +184,7 @@ async function hydrateCategoryPage(categoryIndex, pageIndex) {
 }
 
 async function hydrateVisibleTests(category, tests) {
-  if (!category || category.tip === "failed") return;
+  if (!category || isSpecialCategory(category)) return;
   const categoryIndex = state.categories.indexOf(category);
   if (categoryIndex < 0) return;
   const pages = new Set(tests.map(({ index }) => pageIndexForTest(index)));
@@ -184,8 +192,41 @@ async function hydrateVisibleTests(category, tests) {
 }
 
 async function hydrateCurrentTest() {
-  if (isFailedCategory()) return;
+  if (isFailedCategory() || isMarkedCategory() || isMockCategory()) return;
   await hydrateCategoryPage(state.categoryIndex, pageIndexForTest(state.testIndex));
+}
+
+async function hydrateTestRef(categoryIndex, testIndex) {
+  await hydrateCategoryPage(categoryIndex, pageIndexForTest(testIndex));
+  return state.categories[categoryIndex]?.tests[testIndex];
+}
+
+async function ensureSearchIndex() {
+  if (state.searchIndex) return state.searchIndex;
+  if (state.searchIndexLoading) return state.searchIndexLoading;
+  const dataset = activeDataset();
+  state.searchIndexLoading = fetch(`${dataset.basePath}/search-index.json`)
+    .then((response) => {
+      if (!response.ok) throw new Error(`No se pudo cargar el índice (${response.status})`);
+      return response.json();
+    })
+    .then((payload) => {
+      state.searchIndex = payload.items || [];
+      return state.searchIndex;
+    })
+    .finally(() => {
+      state.searchIndexLoading = null;
+    });
+  return state.searchIndexLoading;
+}
+
+function normalizeSearch(text) {
+  return String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 async function hydrateReviewedPages() {
@@ -224,6 +265,14 @@ function isFailedCategory(index = state.categoryIndex) {
 
 function isMarkedCategory(index = state.categoryIndex) {
   return index === state.categories.length + 1;
+}
+
+function isMockCategory(index = state.categoryIndex) {
+  return index === state.categories.length + 2;
+}
+
+function isSpecialCategory(category) {
+  return ["failed", "marked", "mock"].includes(category?.tip);
 }
 
 function failedQuestions() {
@@ -285,6 +334,19 @@ function markedCategory() {
       test_id: "marcadas",
       questions_count: questions.length,
       questions,
+    }],
+  };
+}
+
+function mockCategory() {
+  return {
+    title: "Simulacro",
+    tip: "mock",
+    tests: [state.mockTest || {
+      id: "simulacro",
+      test_id: "simulacro",
+      questions_count: 0,
+      questions: [],
     }],
   };
 }
@@ -365,6 +427,7 @@ function imageSrc(image) {
 function categoryShortTitle(category) {
   if (category.tip === "failed") return "Falladas";
   if (category.tip === "marked") return "Marcadas";
+  if (category.tip === "mock") return "Simulacro";
   const title = (category.title || `Tipo ${category.tip}`)
     .replace(/^test\s+/i, "")
     .replace(/\s+DGT$/i, " DGT");
@@ -378,6 +441,7 @@ function categoryShortTitle(category) {
 function testDisplayName(test) {
   if (publicTestId(test) === "falladas") return "Preguntas falladas";
   if (publicTestId(test) === "marcadas") return "Preguntas marcadas";
+  if (publicTestId(test) === "simulacro") return "Simulacro";
   return `Test ${publicTestId(test)}`;
 }
 
@@ -448,6 +512,18 @@ function matchesStatusFilter(test) {
   return status === filter;
 }
 
+function searchMatchSet(category) {
+  const query = normalizeSearch(state.query);
+  if (!query || !state.searchIndex || isSpecialCategory(category)) return null;
+  const categoryIndex = state.categories.indexOf(category);
+  if (categoryIndex < 0) return null;
+  const matches = new Set();
+  state.searchIndex.forEach((item) => {
+    if (item.c === categoryIndex && item.text.includes(query)) matches.add(item.t);
+  });
+  return matches;
+}
+
 function datasetSummary() {
   const tests = allTests();
   let done = 0;
@@ -464,6 +540,85 @@ function datasetSummary() {
     if (result.fail <= 2) passed += 1;
   });
   return { total: tests.length, done, passed, failedQuestions, marked };
+}
+
+function topicSummary(category) {
+  const topics = new Map();
+  category.tests.forEach((test) => {
+    const topic = test.topic_title || "Sin tema";
+    if (!topics.has(topic)) {
+      topics.set(topic, { title: topic, total: 0, done: 0, passed: 0, failedQuestions: 0 });
+    }
+    const item = topics.get(topic);
+    item.total += 1;
+    const saved = loadProgress(test);
+    const result = savedResult(test, saved);
+    if (!result) return;
+    item.done += 1;
+    item.failedQuestions += result.fail;
+    if (result.fail <= 2) item.passed += 1;
+  });
+  return [...topics.values()];
+}
+
+function topicTone(topic) {
+  if (!topic.done) return "neutral";
+  const passRate = topic.passed / topic.done;
+  if (passRate >= 0.9) return "good";
+  if (passRate >= 0.65) return "warn";
+  return "bad";
+}
+
+async function startMockExam() {
+  try {
+    showToast("Preparando simulacro...");
+    const index = await ensureSearchIndex();
+    if (!index.length) throw new Error("No hay preguntas para crear el simulacro.");
+    const shuffled = [...index].sort(() => Math.random() - 0.5).slice(0, 30);
+    const pages = new Map();
+    shuffled.forEach((item) => {
+      if (!pages.has(item.c)) pages.set(item.c, new Set());
+      pages.get(item.c).add(pageIndexForTest(item.t));
+    });
+    await Promise.all([...pages.entries()].flatMap(([categoryIndex, pageIndexes]) => (
+      [...pageIndexes].map((pageIndex) => hydrateCategoryPage(categoryIndex, pageIndex))
+    )));
+    const questions = shuffled.map((item, indexItem) => {
+      const test = state.categories[item.c]?.tests[item.t];
+      const question = test?.questions?.[item.q];
+      if (!question) return null;
+      return {
+        ...question,
+        question_id: `mock:${Date.now()}:${indexItem}:${question.question_id}`,
+        original_question_id: question.question_id,
+        origin_test_id: publicTestId(test),
+        origin_test_title: testDisplayName(test),
+        origin_topic_title: test.topic_title || "",
+      };
+    }).filter(Boolean);
+    state.mockTest = {
+      id: "simulacro",
+      test_id: "simulacro",
+      questions_count: questions.length,
+      questions,
+    };
+    state.categoryIndex = state.categories.length + 2;
+    state.testIndex = 0;
+    state.testPage = 0;
+    state.questionIndex = 0;
+    state.query = "";
+    state.statusFilter = "all";
+    els.searchInput.value = "";
+    els.statusFilter.value = "all";
+    state.answers = {};
+    state.reviewed = false;
+    state.marked = new Set();
+    openSidebar(false);
+    render();
+    showToast("Simulacro listo.");
+  } catch (error) {
+    showToast(error.message || "No se pudo crear el simulacro.");
+  }
 }
 
 function resultClass(result) {
@@ -611,10 +766,12 @@ function resetTest() {
 
 function filteredTests(category) {
   const query = state.query.trim().toLowerCase();
+  const indexedMatches = searchMatchSet(category);
   const withIndex = category.tests
     .map((test, index) => ({ test, index }))
-    .filter(({ test }) => matchesStatusFilter(test));
+    .filter(({ test, index }) => matchesStatusFilter(test) && (!indexedMatches || indexedMatches.has(index)));
   if (!query) return withIndex;
+  if (indexedMatches) return withIndex;
   return withIndex
     .filter(({ test }) => {
       const haystack = [
@@ -764,6 +921,31 @@ function renderTests() {
   }
 }
 
+function renderTopicStats() {
+  const category = currentCategory();
+  const isTopics = category && !isSpecialCategory(category) && category.tests.some((test) => test.topic_title);
+  els.topicStats.hidden = !isTopics;
+  if (!isTopics) {
+    els.topicStats.innerHTML = "";
+    return;
+  }
+  const topics = topicSummary(category);
+  els.topicStats.innerHTML = `
+    <div class="topic-stats-head">
+      <span>Rendimiento por tema</span>
+      <strong>${topics.filter((topic) => topic.done).length}/${topics.length}</strong>
+    </div>
+    <div class="topic-stats-grid">
+      ${topics.map((topic) => `
+        <div class="topic-stat ${topicTone(topic)}">
+          <strong>${topic.title}</strong>
+          <span>${topic.done}/${topic.total} tests · ${topic.passed} aprobados · ${topic.failedQuestions} fallos</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderQuestionRail() {
   const test = currentTest();
   els.questionRail.innerHTML = "";
@@ -804,7 +986,7 @@ function renderQuestion() {
     return;
   }
 
-  const specialOrigin = ["falladas", "marcadas"].includes(publicTestId(test)) && question.origin_test_title
+  const specialOrigin = ["falladas", "marcadas", "simulacro"].includes(publicTestId(test)) && question.origin_test_title
     ? `${question.origin_test_title} · `
     : "";
   els.questionCounter.textContent = `${specialOrigin}Pregunta ${state.questionIndex + 1} de ${test.questions.length}`;
@@ -815,7 +997,7 @@ function renderQuestion() {
   els.prevButton.disabled = state.questionIndex === 0;
   els.nextButton.disabled = state.questionIndex === test.questions.length - 1;
   const markId = question.original_question_id || question.question_id;
-  els.markButton.disabled = publicTestId(test) === "falladas" || publicTestId(test) === "marcadas";
+  els.markButton.disabled = ["falladas", "marcadas", "simulacro"].includes(publicTestId(test));
   els.markButton.classList.toggle("active", state.marked.has(markId));
 
   els.answers.innerHTML = "";
@@ -874,6 +1056,8 @@ function render() {
 
   els.categoryLabel.textContent = ["failed", "marked"].includes(category.tip)
     ? `${test.questions.length} preguntas`
+    : category.tip === "mock"
+      ? `${questionsCount(test)} preguntas aleatorias`
     : `${category.title || "Tests"} · ${category.tests.length} tests`;
   els.testTitle.textContent = testDisplayName(test);
   if (test.topic_title && category.tip !== "failed") {
@@ -883,6 +1067,7 @@ function render() {
   updateReviewButtonState(test);
   renderCategories();
   renderTests();
+  renderTopicStats();
   renderQuestion();
   renderStats();
 }
@@ -913,6 +1098,10 @@ function resetViewState() {
   state.loadedPages = new Set();
   state.marked = new Set();
   state.statusFilter = "all";
+  state.searchIndex = null;
+  state.searchIndexLoading = null;
+  state.searchMatches = null;
+  state.mockTest = null;
   els.searchInput.value = "";
   els.statusFilter.value = "all";
 }
@@ -983,6 +1172,14 @@ function init() {
   bindEvents();
   clearQuestionView();
   showPermitModal();
+  registerServiceWorker();
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
 }
 
 function bindEvents() {
@@ -992,6 +1189,7 @@ function bindEvents() {
   els.menuButton.addEventListener("click", () => openSidebar(true));
   els.scrim.addEventListener("click", () => openSidebar(false));
   els.changePermitButton.addEventListener("click", showPermitModal);
+  els.mockButton.addEventListener("click", startMockExam);
   els.exportButton.addEventListener("click", exportProgress);
   els.importButton.addEventListener("click", () => els.importFile.click());
   els.importFile.addEventListener("change", (event) => {
@@ -1016,7 +1214,13 @@ function bindEvents() {
   els.searchInput.addEventListener("input", (event) => {
     state.query = event.target.value;
     state.testPage = 0;
-    renderTests();
+    if (state.query.trim().length >= 3) {
+      ensureSearchIndex()
+        .then(() => render())
+        .catch((error) => showToast(error.message || "No se pudo cargar el buscador."));
+    } else {
+      render();
+    }
   });
   els.statusFilter.addEventListener("change", (event) => applyStatusFilter(event.target.value));
   window.addEventListener("keydown", (event) => {
